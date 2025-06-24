@@ -1,0 +1,8 @@
+anytree
+meshcat>=0.0.16
+numpy
+trimesh[easy]
+jupyter
+matplotlib
+pandas
+pytest

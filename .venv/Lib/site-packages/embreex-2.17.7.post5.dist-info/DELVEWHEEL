@@ -1,0 +1,2 @@
+Version: 1.7.1
+Arguments: ['C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cibw-run-l92ysnmj\\cp37-win_amd64\\build\\venv\\Scripts\\delvewheel', 'repair', '--add-path', 'embree2\\bin', '--no-mangle', 'tbb12.dll;embree2.dll', '-w', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cibw-run-l92ysnmj\\cp37-win_amd64\\repaired_wheel', 'C:\\Users\\runneradmin\\AppData\\Local\\Temp\\cibw-run-l92ysnmj\\cp37-win_amd64\\built_wheel\\embreex-2.17.7.post5-cp37-cp37m-win_amd64.whl']
