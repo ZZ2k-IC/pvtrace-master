@@ -80,9 +80,6 @@ def next_hit(scene, ray):
     
     # Convert intersection points to world node
     intersections = [x.to(scene.root) for x in intersections]
-    
-    if ray.direction == (0.0, 0.0, 0.0):
-        return None
 
     # Node which owns the surface
     if len(intersections) == 0:
@@ -158,7 +155,7 @@ def follow(scene, ray, maxsteps=1000, maxpathlength=np.inf, emit_method='kT'):
 
         # Check for zero direction vector - ray is "dead"
         if ray.direction == (0.0, 0.0, 0.0):
-            history.append((ray, (None,None,None),Event.ABSORB))
+            history.append((ray, (None,None,None),Event.DETECT))
             break
     
         info = next_hit(scene, ray)

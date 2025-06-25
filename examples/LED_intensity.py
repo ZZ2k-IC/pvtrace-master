@@ -4,7 +4,7 @@ import functools
 import numpy as np
 
 # Set up the rays number
-rays_num = 1000
+rays_num = 200
 
 # Add nodes to the scene graph
 world = Node(
@@ -14,7 +14,7 @@ world = Node(
         material=Material(refractive_index=1.0),
     )
 )
-
+"""
 box = Node(
     name="Santovac 5",
     geometry=Box(
@@ -23,7 +23,7 @@ box = Node(
     ),
     parent=world
 )
-
+"""
 cylinder = Node(
     name="Cylinder (fused quartz)",
     geometry=Cylinder(
@@ -45,7 +45,7 @@ light = Node(
     )
 )
 
-# light.translate((0, 0, 0.1))
+light.translate((0, 0, 0.1))
 
 # Add detector at bottom of cylinder (z=0.1) - detects rays coming from above
 bottom_detector = create_planar_detector_node(

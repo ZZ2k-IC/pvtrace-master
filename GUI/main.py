@@ -13,7 +13,7 @@ from PySide2.QtUiTools import QUiLoader
 from pvtrace import *
 #from pvtrace.geometry.utils import EPS_ZERO
 from pvtrace.light.utils import wavelength_to_rgb
-from pvtrace.material.utils import lambertian
+from pvtrace.material.utils import lambertian, isotropic
 from pvtrace.light.event import Event
 import time
 import functools
@@ -739,7 +739,7 @@ class testingQT(QWidget):
                 if maxZ_LSC2 < 1:
                     light_z = offsetZ + maxZ_LSC2/2 + maxZ_LSC2*0.1  # 10% above LSC2 top
                 else:
-                    light_z = offsetZ + maxZ_LSC2/2 + 0.5 # 0.5 units above LSC2 top
+                    light_z = offsetZ + maxZ_LSC2/2 - 0.01 # 0.5 units above LSC2 top
                 
                 light.location = (offsetX, offsetY, light_z)
                 print(f"Light positioned above LSC2 at: ({offsetX}, {offsetY}, {light_z})")
@@ -811,7 +811,6 @@ class testingQT(QWidget):
                         continue
                     if(self.enclosingBox.isChecked() and events[0]==Event.GENERATE and events[1]==Event.TRANSMIT and events[2] == Event.TRANSMIT and events[3] == Event.EXIT):
                         continue
-
 
                     entrance_rays.append(path[0])
                     

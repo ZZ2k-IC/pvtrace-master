@@ -290,7 +290,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>0.21</string>
+      <string>0.19</string>
      </property>
      <property name="placeholderText">
       <string>z</string>
@@ -998,12 +998,12 @@
      </property>
      <item>
       <property name="text">
-       <string>Box</string>
+       <string>Cylinder</string>
       </property>
      </item>
      <item>
       <property name="text">
-       <string>Cylinder</string>
+       <string>Box</string>
       </property>
      </item>
      <item>
@@ -1119,7 +1119,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>1.0</string>
+      <string>5.0</string>
      </property>
      <property name="placeholderText">
       <string>z</string>
@@ -1152,7 +1152,7 @@
      </property>
      <item>
       <property name="text">
-       <string>Lumogen Red</string>
+       <string>None</string>
       </property>
      </item>
      <item>
@@ -1162,7 +1162,7 @@
      </item>
      <item>
       <property name="text">
-       <string>None</string>
+       <string>Lumogen Red</string>
       </property>
      </item>
     </widget>
@@ -1276,7 +1276,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>0.5</string>
+      <string>0.0</string>
      </property>
     </widget>
     
@@ -1389,7 +1389,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>0.6</string>
+      <string>2.6</string>
      </property>
     </widget>
     
@@ -1536,7 +1536,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>2.5</string>
+     <string>1.5</string>
     </property>
     <property name="placeholderText">
      <string>y</string>
@@ -1552,7 +1552,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>2.5</string>
+     <string>1.5</string>
     </property>
     <property name="placeholderText">
      <string>x</string>
