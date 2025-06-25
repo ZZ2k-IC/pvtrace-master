@@ -685,10 +685,42 @@ class testingQT(QWidget):
                 ),
                 parent = world
             )
-            if(maxZ < 1):
-                light.location = (0,0,maxZ*1.1)
+            # Determine light position based on whether second LSC is enabled
+            enableSecondLSC = self.enableSecondLSC.isChecked()
+            
+            if enableSecondLSC:
+                # Position light above the second LSC (waveguide)
+                LSC2dimX = float(self.dimx2.text())
+                LSC2dimY = float(self.dimy2.text())
+                LSC2dimZ = float(self.dimz2.text())
+                offsetX = float(self.lsc2_offsetX.text())
+                offsetY = float(self.lsc2_offsetY.text())
+                offsetZ = float(self.lsc2_offsetZ.text())
+                
+                # Determine the maximum dimension for positioning
+                LSC2shape = self.inputShape2.currentText()
+                if LSC2shape == 'Sphere':
+                    maxZ_LSC2 = LSC2dimX
+                else:
+                    maxZ_LSC2 = LSC2dimZ
+                
+                # Position light above LSC2 with offsets
+                if maxZ_LSC2 < 1:
+                    light_z = offsetZ + maxZ_LSC2/2 + maxZ_LSC2*0.1  # 10% above LSC2 top
+                else:
+                    light_z = offsetZ + maxZ_LSC2/2 + 0.5  # 0.5 units above LSC2 top
+                
+                light.location = (offsetX, offsetY, light_z)
+                print(f"Light positioned above LSC2 at: ({offsetX}, {offsetY}, {light_z})")
+                
             else:
-                light.location = (0,0,maxZ/2+0.5)
+                # Original positioning above primary LSC
+                if(maxZ < 1):
+                    light.location = (0,0,maxZ*1.1)
+                else:
+                    light.location = (0,0,maxZ/2+0.5)
+                print(f"Light positioned above LSC1 at: (0, 0, {light.location[2]})")
+            
             light.rotate(np.radians(180), (1, 0, 0))
             return wavelengths*1e9, intensity5800, light
         
@@ -797,7 +829,7 @@ class testingQT(QWidget):
             
             return entrance_rays, exit_rays, exit_norms, k
         
-        def analyzeResults(self, entrance_rays, exit_rays, exit_norms):
+        def analyzeResults(entrance_rays, exit_rays, exit_norms):
             # Primary LSC (LSC1) results
             edge_emit = 0
             edge_emit_left = 0

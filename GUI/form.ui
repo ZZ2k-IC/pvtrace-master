@@ -565,7 +565,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>200</string>
+      <string>100</string>
      </property>
      <property name="placeholderText">
       <string>x/y</string>
@@ -869,7 +869,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>5.0</string>
+      <string>2.0</string>
      </property>
      <property name="placeholderText">
       <string>x</string>
@@ -900,7 +900,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>5.0</string>
+      <string>2.0</string>
      </property>
      <property name="placeholderText">
       <string>y</string>
@@ -931,7 +931,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>0.3</string>
+      <string>1.0</string>
      </property>
      <property name="placeholderText">
       <string>z</string>
@@ -1201,7 +1201,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>1.0</string>
+      <string>0.6</string>
      </property>
     </widget>
     
