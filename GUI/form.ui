@@ -16,8 +16,8 @@
   <widget class="QPushButton" name="pushButton">
    <property name="geometry">
     <rect>
-     <x>230</x>
-     <y>600</y>
+     <x>100</x>
+     <y>1000</y>
      <width>141</width>
      <height>32</height>
     </rect>
@@ -783,7 +783,195 @@
     <property name="enabled">
      <bool>false</bool>
     </property>
-    
+
+    <!-- Detector Section -->
+    <widget class="QLabel" name="label_detector">
+    <property name="geometry">
+    <rect>
+    <x>16</x>
+    <y>175</y>
+    <width>111</width>
+    <height>21</height>
+    </rect>
+    </property>
+    <property name="text">
+    <string>Detector</string>
+    </property>
+    </widget>
+
+    <!-- Enable Detector Checkbox -->
+    <widget class="QCheckBox" name="checkBox_detector">
+    <property name="geometry">
+    <rect>
+    <x>26</x>
+    <y>195</y>
+    <width>111</width>
+    <height>21</height>
+    </rect>
+    </property>
+    <property name="text">
+    <string>Enable Detector</string>
+    </property>
+    <property name="checked">
+    <bool>false</bool>
+    </property>
+    </widget>
+
+    <!-- Detector Position Controls -->
+    <widget class="QLabel" name="label_detector_pos">
+    <property name="geometry">
+    <rect>
+    <x>150</x>
+    <y>195</y>
+    <width>31</width>
+    <height>21</height>
+    </rect>
+    </property>
+    <property name="text">
+    <string>Position:</string>
+    </property>
+    </widget>
+
+    <widget class="QLabel" name="label_detector_X">
+    <property name="geometry">
+    <rect>
+    <x>180</x>
+    <y>175</y>
+    <width>16</width>
+    <height>21</height>
+    </rect>
+    </property>
+    <property name="text">
+    <string>X</string>
+    </property>
+    </widget>
+
+    <widget class="QLineEdit" name="lineEdit_detectorX">
+    <property name="geometry">
+    <rect>
+    <x>196</x>
+    <y>175</y>
+    <width>35</width>
+    <height>21</height>
+    </rect>
+    </property>
+    <property name="text">
+    <string>0</string>
+    </property>
+    </widget>
+
+    <widget class="QLabel" name="label_detector_Y">
+    <property name="geometry">
+    <rect>
+    <x>235</x>
+    <y>175</y>
+    <width>16</width>
+    <height>21</height>
+    </rect>
+    </property>
+    <property name="text">
+    <string>Y</string>
+    </property>
+    </widget>
+
+    <widget class="QLineEdit" name="lineEdit_detectorY">
+    <property name="geometry">
+    <rect>
+    <x>251</x>
+    <y>175</y>
+    <width>35</width>
+    <height>21</height>
+    </rect>
+    </property>
+    <property name="text">
+    <string>0</string>
+    </property>
+    </widget>
+
+    <widget class="QLabel" name="label_detector_Z">
+    <property name="geometry">
+    <rect>
+    <x>290</x>
+    <y>175</y>
+    <width>16</width>
+    <height>21</height>
+    </rect>
+    </property>
+    <property name="text">
+    <string>Z</string>
+    </property>
+    </widget>
+
+    <widget class="QLineEdit" name="lineEdit_detectorZ">
+    <property name="geometry">
+    <rect>
+    <x>306</x>
+    <y>175</y>
+    <width>35</width>
+    <height>21</height>
+    </rect>
+    </property>
+    <property name="text">
+    <string>1.0</string>
+    </property>
+    </widget>
+
+    <!-- Detector Direction Controls -->
+    <widget class="QLabel" name="label_detector_dir">
+    <property name="geometry">
+    <rect>
+    <x>350</x>
+    <y>175</y>
+    <width>31</width>
+    <height>21</height>
+    </rect>
+    </property>
+    <property name="text">
+    <string>Dir:</string>
+    </property>
+    </widget>
+
+    <widget class="QComboBox" name="comboBox_detector_dir">
+    <property name="geometry">
+    <rect>
+    <x>385</x>
+    <y>175</y>
+    <width>80</width>
+    <height>21</height>
+    </rect>
+    </property>
+    <item>
+    <property name="text">
+    <string>Up (+Z)</string>
+    </property>
+    </item>
+    <item>
+    <property name="text">
+    <string>Down (-Z)</string>
+    </property>
+    </item>
+    <item>
+    <property name="text">
+    <string>Left (-X)</string>
+    </property>
+    </item>
+    <item>
+    <property name="text">
+    <string>Right (+X)</string>
+    </property>
+    </item>
+    <item>
+    <property name="text">
+    <string>Front (-Y)</string>
+    </property>
+    </item>
+    <item>
+    <property name="text">
+    <string>Back (+Y)</string>
+    </property>
+    </item>
+    </widget>
+
     <!-- LSC2 Geometry -->
     <widget class="QLabel" name="label_2nd">
      <property name="geometry">
@@ -1111,7 +1299,7 @@
      <property name="geometry">
       <rect>
        <x>26</x>
-       <y>170</y>
+       <y>150</y>
        <width>91</width>
        <height>21</height>
       </rect>
@@ -1125,7 +1313,7 @@
      <property name="geometry">
       <rect>
        <x>146</x>
-       <y>150</y>
+       <y>130</y>
        <width>21</width>
        <height>21</height>
       </rect>
@@ -1139,7 +1327,7 @@
      <property name="geometry">
       <rect>
        <x>146</x>
-       <y>170</y>
+       <y>150</y>
        <width>41</width>
        <height>21</height>
       </rect>
@@ -1153,7 +1341,7 @@
      <property name="geometry">
       <rect>
        <x>196</x>
-       <y>150</y>
+       <y>130</y>
        <width>21</width>
        <height>21</height>
       </rect>
@@ -1167,7 +1355,7 @@
      <property name="geometry">
       <rect>
        <x>196</x>
-       <y>170</y>
+       <y>150</y>
        <width>41</width>
        <height>21</height>
       </rect>
@@ -1181,7 +1369,7 @@
      <property name="geometry">
       <rect>
        <x>246</x>
-       <y>150</y>
+       <y>130</y>
        <width>21</width>
        <height>21</height>
       </rect>
@@ -1195,7 +1383,7 @@
      <property name="geometry">
       <rect>
        <x>246</x>
-       <y>170</y>
+       <y>150</y>
        <width>41</width>
        <height>21</height>
       </rect>

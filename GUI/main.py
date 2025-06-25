@@ -123,6 +123,18 @@ class testingQT(QWidget):
         self.finishInput.clicked.connect(self.onFinishInputClicked)
         self.thinFilm.clicked.connect(self.onThinFilmClicked)
 
+
+        # Detector controls
+        self.enableDetector = self.findChild(QtWidgets.QCheckBox,'checkBox_detector')
+        self.detector_posX = self.findChild(QtWidgets.QLineEdit,'lineEdit_detectorX')
+        self.detector_posY = self.findChild(QtWidgets.QLineEdit,'lineEdit_detectorY')
+        self.detector_posZ = self.findChild(QtWidgets.QLineEdit,'lineEdit_detectorZ')
+        self.detector_direction = self.findChild(QtWidgets.QComboBox,'comboBox_detector_dir')
+
+        # Connect detector signals
+        if self.enableDetector is not None:
+            self.enableDetector.stateChanged.connect(self.onEnableDetector)
+
             
         # Second LSC (Waveguide) controls
         self.enableSecondLSC = self.findChild(QtWidgets.QCheckBox,'checkBox_secondLSC')
@@ -163,6 +175,24 @@ class testingQT(QWidget):
             print("Connected enableSecondLSC signal")
         else:
             print("ERROR: checkBox_secondLSC not found!")
+
+    def onEnableDetector(self):
+        """Handle detector enable/disable"""
+        if self.enableDetector is None:
+            return
+            
+        enabled = self.enableDetector.isChecked()
+        print(f"Detector enabled: {enabled}")
+        
+        # Enable/disable detector controls
+        if self.detector_posX:
+            self.detector_posX.setEnabled(enabled)
+        if self.detector_posY:
+            self.detector_posY.setEnabled(enabled)
+        if self.detector_posZ:
+            self.detector_posZ.setEnabled(enabled)
+        if self.detector_direction:
+            self.detector_direction.setEnabled(enabled)
         
 
     def onEnableSecondLSC(self):
@@ -409,6 +439,23 @@ class testingQT(QWidget):
     def runPVTrace(self, dataFile):
         print('Input Received')
 
+        enableSecondLSC = self.enableSecondLSC.isChecked()
+        if enableSecondLSC:
+            LSC2dimX = float(self.dimx2.text())
+            LSC2dimY = float(self.dimy2.text())
+            LSC2dimZ = float(self.dimz2.text())
+            LSC2shape = self.inputShape2.currentText()
+            LumType2 = self.lumophore2.currentText()
+            LumConc2 = float(self.lumophoreConc2.text())
+            LumPLQY2 = float(self.lumophorePLQY2.text())
+            wavAbs2 = float(self.waveguideAbs2.text())
+            wavN2 = float(self.waveguideN2.text())
+            
+            # Positioning offsets
+            offsetX = float(self.lsc2_offsetX.text())
+            offsetY = float(self.lsc2_offsetY.text())
+            offsetZ = float(self.lsc2_offsetZ.text())
+
         def createWorld(dim):
             world = Node(
             name="World",
@@ -494,6 +541,8 @@ class testingQT(QWidget):
             # print(LSC.geometry.trimesh.extents)
             LSC.location = [0,0,0]
             return LSC
+            
+        
         
         def createMeshLSC2(self, wavAbs, wavN):
             LSC2 = Node(
@@ -660,6 +709,7 @@ class testingQT(QWidget):
             
             return LSC
         
+        
         def initLight(lightWavMin, lightWavMax):
             h = 6.626e-34
             c = 3.0e+8
@@ -685,8 +735,6 @@ class testingQT(QWidget):
                 ),
                 parent = world
             )
-            # Determine light position based on whether second LSC is enabled
-            enableSecondLSC = self.enableSecondLSC.isChecked()
             
             if enableSecondLSC:
                 # Position light above the second LSC (waveguide)
@@ -1016,6 +1064,21 @@ class testingQT(QWidget):
                         dataFile.write(str(exit_norms[index][k]) + "\t")
                     dataFile.write(str(ray.wavelength) + "\t" + lsc_source + "\n")
 
+
+            # Simplified detector analysis
+            if enableSecondLSC and self.enableDetector.isChecked() and hasattr(self, 'current_detector') and self.current_detector:
+                detector_hits = self.current_detector.detector_delegate.detected_count - self.detector_initial_count
+                detector_efficiency = detector_hits / numRays * 100
+                
+                print(f"\n=== DETECTOR RESULTS ===")
+                print(f"Detector hits: {detector_hits}")
+                print(f"Detector efficiency: {detector_efficiency:.2f}%")
+                
+                if dataFile:
+                    dataFile.write(f"\n=== DETECTOR RESULTS ===\n")
+                    dataFile.write(f"Detector hits\t{detector_hits}\n")
+                    dataFile.write(f"Detector efficiency\t{detector_efficiency:.2f}%\n")
+
             # Continue with existing wavelength and plotting analysis...
             # [Rest of the function remains the same for plotting]
             xpos_ent = []
@@ -1206,22 +1269,6 @@ class testingQT(QWidget):
         
         world = createWorld(max(LSCdimX, LSCdimY, maxZ))
 
-        enableSecondLSC = self.enableSecondLSC.isChecked()
-        if enableSecondLSC:
-            LSC2dimX = float(self.dimx2.text())
-            LSC2dimY = float(self.dimy2.text())
-            LSC2dimZ = float(self.dimz2.text())
-            LSC2shape = self.inputShape2.currentText()
-            LumType2 = self.lumophore2.currentText()
-            LumConc2 = float(self.lumophoreConc2.text())
-            LumPLQY2 = float(self.lumophorePLQY2.text())
-            wavAbs2 = float(self.waveguideAbs2.text())
-            wavN2 = float(self.waveguideN2.text())
-            
-            # Positioning offsets
-            offsetX = float(self.lsc2_offsetX.text())
-            offsetY = float(self.lsc2_offsetY.text())
-            offsetZ = float(self.lsc2_offsetZ.text())
         
         # Create world with larger dimensions to accommodate both LSCs
         if enableSecondLSC:
@@ -1306,6 +1353,65 @@ class testingQT(QWidget):
             # Position the second LSC
             LSC2.location = [offsetX, offsetY, offsetZ]
             LSC2.name = "LSC2_Waveguide"
+
+            # CREATE DETECTOR HERE - AFTER WORLD AND LSCs ARE CREATED
+            if self.enableDetector.isChecked():
+                # Get detector parameters
+                detector_x = float(self.detector_posX.text())
+                detector_y = float(self.detector_posY.text())
+                detector_z = float(self.detector_posZ.text())
+                
+                # Use LSC2 dimensions for detector size
+                detector_length = LSC2dimX
+                detector_width = LSC2dimY
+                
+                # Get detection direction
+                dir_text = self.detector_direction.currentText()
+                if dir_text == "Down (-Z)":
+                    normal = (0, 0, 1)
+                    detection_direction = (0, 0, -1)
+                elif dir_text == "Up (+Z)":
+                    normal = (0, 0, -1)
+                    detection_direction = (0, 0, 1)
+                elif dir_text == "Left (-X)":
+                    normal = (1, 0, 0)
+                    detection_direction = (-1, 0, 0)
+                elif dir_text == "Right (+X)":
+                    normal = (-1, 0, 0)
+                    detection_direction = (1, 0, 0)
+                elif dir_text == "Front (-Y)":
+                    normal = (0, 1, 0)
+                    detection_direction = (0, -1, 0)
+                elif dir_text == "Back (+Y)":
+                    normal = (0, -1, 0)
+                    detection_direction = (0, 1, 0)
+                else:
+                    # Default
+                    normal = (0, 0, 1)
+                    detection_direction = (0, 0, -1)
+                
+                # Create detector using the simple method from LED_intensity.py
+                detector = create_planar_detector_node(
+                    name="LSC2_Detector",
+                    length=detector_length,
+                    width=detector_width,
+                    normal=normal,
+                    detection_direction=detection_direction,
+                    parent=world
+                )
+                
+                # Position the detector
+                detector.translate((detector_x, detector_y, detector_z))
+                print(f"Detector created at position: ({detector_x}, {detector_y}, {detector_z})")
+                print(f"Detector size: {detector_length} x {detector_width}")
+                print(f"Detection direction: {dir_text}")
+                
+                # Store initial detector count and make accessible
+                self.current_detector = detector
+                self.detector_initial_count = detector.detector_delegate.detected_count
+            else:
+                self.current_detector = None
+                self.detector_initial_count = 0
             
             # Add lumophore to second LSC if needed
             if(LumType2 == 'Lumogen Red'):
