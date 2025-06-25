@@ -158,23 +158,6 @@ class testingQT(QWidget):
         self.enableSecondLSC.stateChanged.connect(self.onEnableSecondLSC)
         self.inputShape2.currentTextChanged.connect(self.onShape2Changed)
 
-        # Add this to your __init__ method after finding the checkbox
-        if self.enableSecondLSC is not None:
-            # Test if checkbox is enabled and clickable
-            print(f"Checkbox enabled: {self.enableSecondLSC.isEnabled()}")
-            print(f"Checkbox visible: {self.enableSecondLSC.isVisible()}")
-            print(f"Checkbox geometry: {self.enableSecondLSC.geometry()}")
-            print(f"Checkbox parent: {self.enableSecondLSC.parent()}")
-            
-            # Force enable the checkbox
-            self.enableSecondLSC.setEnabled(True)
-            self.enableSecondLSC.show()
-            
-            # Connect the signal
-            self.enableSecondLSC.stateChanged.connect(self.onEnableSecondLSC)
-            print("Connected enableSecondLSC signal")
-        else:
-            print("ERROR: checkBox_secondLSC not found!")
 
     def onEnableDetector(self):
         """Handle detector enable/disable"""
@@ -756,7 +739,7 @@ class testingQT(QWidget):
                 if maxZ_LSC2 < 1:
                     light_z = offsetZ + maxZ_LSC2/2 + maxZ_LSC2*0.1  # 10% above LSC2 top
                 else:
-                    light_z = offsetZ + maxZ_LSC2/2 + 0.5  # 0.5 units above LSC2 top
+                    light_z = offsetZ + maxZ_LSC2/2 + 0.5 # 0.5 units above LSC2 top
                 
                 light.location = (offsetX, offsetY, light_z)
                 print(f"Light positioned above LSC2 at: ({offsetX}, {offsetY}, {light_z})")
@@ -791,6 +774,7 @@ class testingQT(QWidget):
             entrance_rays = []
             exit_rays = []
             exit_norms = []
+            absorbed_rays = []
             max_rays = numRays
                 
             vis = MeshcatRenderer(open_browser=showSim, transparency=False, opacity=0.5, wireframe=True)
@@ -827,12 +811,22 @@ class testingQT(QWidget):
                         continue
                     if(self.enclosingBox.isChecked() and events[0]==Event.GENERATE and events[1]==Event.TRANSMIT and events[2] == Event.TRANSMIT and events[3] == Event.EXIT):
                         continue
-                    # vis.add_ray_path(path)
-                    vis.add_history(steps, **history_args)
+
+
                     entrance_rays.append(path[0])
-                    if events[-1] in (photon_tracer.Event.ABSORB, photon_tracer.Event.KILL):
+                    
+                    if events[-1] == photon_tracer.Event.ABSORB:
+                        # vis.add_ray_path(path)
+                        vis.add_history(steps, **history_args)
+                        
                         exit_norms.append(surfnorms[-1])
-                        exit_rays.append(path[-1])  
+                        exit_rays.append(path[-1])
+                        absorbed_rays.append(path[-1])
+
+                    elif events[-1] == photon_tracer.Event.KILL:
+                        exit_norms.append(surfnorms[-1])
+                        exit_rays.append(path[-1])
+  
                     elif events[-1] == photon_tracer.Event.EXIT:
                         exit_norms.append(surfnorms[-2])
                         j = surfnorms[-2]
@@ -875,9 +869,9 @@ class testingQT(QWidget):
             time.sleep(1)
             vis.render(scene)
             
-            return entrance_rays, exit_rays, exit_norms, k
+            return entrance_rays, exit_rays, exit_norms, absorbed_rays, k
         
-        def analyzeResults(entrance_rays, exit_rays, exit_norms):
+        def analyzeResults(entrance_rays, exit_rays, exit_norms, absorbed_rays):
             # Primary LSC (LSC1) results
             edge_emit = 0
             edge_emit_left = 0
@@ -886,6 +880,7 @@ class testingQT(QWidget):
             edge_emit_back = 0
             edge_emit_bottom = 0
             edge_emit_top = 0
+
             
             # Second LSC (LSC2/Waveguide) results
             edge_emit_lsc2 = 0
@@ -1002,10 +997,26 @@ class testingQT(QWidget):
 
             # Calculate total rays
             numRays = len(entrance_rays)
-            
+            total_exit_rays = len(exit_rays)
+
+            # Add absorbed ray positions and wavelengths
+            xpos_abs = []
+            ypos_abs = []
+            absorbed_wavs = []
+            for ray in absorbed_rays:
+                absorbed_wavs.append(ray.wavelength)
+                xpos_abs.append(ray.position[0])
+                ypos_abs.append(ray.position[1])
+
+            # Calculate actual absorption (only ABSORB events)
+            actual_absorbed_rays = len(absorbed_rays)
+            absorption_percentage = (actual_absorbed_rays / numRays) * 100 if numRays > 0 else 0
+
+
             # Print results with clear separation between LSCs
             print("\n=== PRIMARY LSC (LSC1) RESULTS ===")
             print("Optical efficiency: " + str(edge_emit/numRays))
+            print(f"Light absorbed by system: {actual_absorbed_rays} rays ({absorption_percentage:.2f}%)")
             print("\t\tLeft \tRight \tFront \tBack")
             print("Edge emission\t" + str(edge_emit_left/numRays) + " \t" + str(edge_emit_right/numRays) + " \t" + str(edge_emit_front/numRays) + " \t" + str(edge_emit_back/numRays))
             print("Bottom emission\t" + str(edge_emit_bottom/numRays) + "\t Absorption coeff " + str(-np.log10(max(edge_emit_bottom/numRays, 1e-10))/float(self.dimz.text())))
@@ -1098,22 +1109,37 @@ class testingQT(QWidget):
                     emit_wavs.append(exit_wavs[k])
                     
             
+            # REPLACE THIS SECTION (lines 1133-1149):
             plt.figure(1, clear = True)
             norm = plt.Normalize(*(wavMin,wavMax))
             wl = np.arange(wavMin, wavMax+1,2)
             colorlist = list(zip(norm(wl), [np.array(wavelength_to_rgb(w))/255 for w in wl]))
             spectralmap = matplotlib.colors.LinearSegmentedColormap.from_list("spectrum", colorlist)
-            colors_ent = [spectralmap(norm(value)) for value in entrance_wavs]
-            colors_exit = [spectralmap(norm(value)) for value in exit_wavs]
-            scatter(xpos_ent, ypos_ent, alpha=1.0, color=colors_ent)
-            scatter(xpos_exit, ypos_exit, alpha=1.0, color=colors_exit)
-            plt.title('entrance/exit positions')
-            plt.xlabel('x position')
-            plt.ylabel('y position')
-            plt.axis('equal')
+
+            # Plot absorbed rays instead of entrance/exit
+            if absorbed_wavs:  # Only plot if there are absorbed rays
+                colors_abs = [spectralmap(norm(value)) for value in absorbed_wavs]
+                scatter(xpos_abs, ypos_abs, alpha=1.0, color=colors_abs, s=20)
+                plt.title(f'Light absorption positions ({len(absorbed_rays)} rays absorbed)')
+                plt.xlabel('x position')
+                plt.ylabel('y position')
+                plt.axis('equal')
+                
+                # Add absorption statistics text box
+                absorption_percentage = (len(absorbed_rays) / numRays) * 100
+                plt.text(0.02, 0.98, 
+                        f'Total rays: {numRays}\nAbsorbed: {len(absorbed_rays)}\nAbsorption: {absorption_percentage:.1f}%', 
+                        transform=plt.gca().transAxes, verticalalignment='top',
+                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            else:
+                plt.text(0.5, 0.5, 'No rays absorbed', transform=plt.gca().transAxes, 
+                        ha='center', va='center', fontsize=14)
+                plt.title('Light absorption positions (No absorption detected)')
+                plt.xlabel('x position')
+                plt.ylabel('y position')
+
             if(self.saveFolder!=''):
-                plt.savefig(self.saveFolder+"/"+"xy_plot.png", dpi=figDPI)
-            plt.title('Entrance/exit ray positions')
+                plt.savefig(self.saveFolder+"/"+"absorption_plot.png", dpi=figDPI)
             plt.pause(0.00001)
             
             plt.figure(2, clear = True)
@@ -1431,8 +1457,8 @@ class testingQT(QWidget):
             light = addLightDiv(light, lightDiv)
             
         
-        entrance_rays, exit_rays, exit_norms, numRays = doRayTracing(numRays, convThres, showSim)
-        analyzeResults(entrance_rays, exit_rays, exit_norms)
+        entrance_rays, exit_rays, exit_norms, absorbed_rays, numRays = doRayTracing(numRays, convThres, showSim)
+        analyzeResults(entrance_rays, exit_rays, exit_norms, absorbed_rays)
         return entrance_rays, exit_rays, exit_norms
         
         
