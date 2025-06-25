@@ -34,6 +34,8 @@ class testingQT(QWidget):
         super(testingQT, self).__init__()
         main_widget = self.load_ui()
         
+        self.move(845, 0)
+        
         # layout = QtWidgets.QVBoxLayout()
         # layout.addWidget(main_widget)
         # self.setLayout(layout)
@@ -120,9 +122,75 @@ class testingQT(QWidget):
         self.finishInput = self.findChild(QtWidgets.QPushButton, 'pushButton')
         self.finishInput.clicked.connect(self.onFinishInputClicked)
         self.thinFilm.clicked.connect(self.onThinFilmClicked)
+
+            
+        # Second LSC (Waveguide) controls
+        self.enableSecondLSC = self.findChild(QtWidgets.QCheckBox,'checkBox_secondLSC')
+        self.inputShape2 = self.findChild(QtWidgets.QComboBox,'comboBox_2nd')
+        self.STLfile2 = ''
+        self.lumophore2 = self.findChild(QtWidgets.QComboBox,'comboBox_2_2nd')
+        self.lumophoreConc2 = self.findChild(QtWidgets.QLineEdit,'lineEdit_20_2nd')
+        self.waveguideAbs2 = self.findChild(QtWidgets.QLineEdit,'lineEdit_23_2nd')
+        self.waveguideN2 = self.findChild(QtWidgets.QLineEdit,'lineEdit_24_2nd')
+        self.lumophorePLQY2 = self.findChild(QtWidgets.QLineEdit,'lineEdit_25_2nd')
+        self.dimx2 = self.findChild(QtWidgets.QLineEdit,'lineEdit_2nd')
+        self.dimy2 = self.findChild(QtWidgets.QLineEdit,'lineEdit_13_2nd')
+        self.dimz2 = self.findChild(QtWidgets.QLineEdit,'lineEdit_2_2nd')
         
+        # Second LSC positioning
+        self.lsc2_offsetX = self.findChild(QtWidgets.QLineEdit,'lineEdit_offsetX')
+        self.lsc2_offsetY = self.findChild(QtWidgets.QLineEdit,'lineEdit_offsetY')
+        self.lsc2_offsetZ = self.findChild(QtWidgets.QLineEdit,'lineEdit_offsetZ')
         
+        # Connect signals
+        self.enableSecondLSC.stateChanged.connect(self.onEnableSecondLSC)
+        self.inputShape2.currentTextChanged.connect(self.onShape2Changed)
+
+        # Add this to your __init__ method after finding the checkbox
+        if self.enableSecondLSC is not None:
+            # Test if checkbox is enabled and clickable
+            print(f"Checkbox enabled: {self.enableSecondLSC.isEnabled()}")
+            print(f"Checkbox visible: {self.enableSecondLSC.isVisible()}")
+            print(f"Checkbox geometry: {self.enableSecondLSC.geometry()}")
+            print(f"Checkbox parent: {self.enableSecondLSC.parent()}")
+            
+            # Force enable the checkbox
+            self.enableSecondLSC.setEnabled(True)
+            self.enableSecondLSC.show()
+            
+            # Connect the signal
+            self.enableSecondLSC.stateChanged.connect(self.onEnableSecondLSC)
+            print("Connected enableSecondLSC signal")
+        else:
+            print("ERROR: checkBox_secondLSC not found!")
         
+
+    def onEnableSecondLSC(self):
+        if self.enableSecondLSC is None:
+            print("ERROR: enableSecondLSC is None!")
+            return
+            
+        enabled = self.enableSecondLSC.isChecked()
+        print(f"Second LSC enabled: {enabled}")
+        
+        # Enable/disable the frame containing all second LSC controls
+        self.frame_2nd = self.findChild(QtWidgets.QFrame, 'frame_2nd')
+        if self.frame_2nd:
+            self.frame_2nd.setEnabled(enabled)
+            print("Frame enabled/disabled successfully")
+        else:
+            print("ERROR: frame_2nd not found!")
+
+    def onShape2Changed(self):
+        if self.inputShape2 is None:
+            print("ERROR: inputShape2 is None!")
+            return
+            
+        if(self.inputShape2.currentText() == 'Import Mesh'):
+            self.STLfile2 = QtWidgets.QFileDialog.getOpenFileName(self, 'OpenFile')
+            self.STLfile2 = self.STLfile2[0]
+            print(f"Selected STL file: {self.STLfile2}")
+    
 
     def load_ui(self):
         loader = QUiLoader()
@@ -228,7 +296,20 @@ class testingQT(QWidget):
             'saveFolder': self.saveFolder,
             'figDPI': (self.figDPI.text()),
             'resultsFileName': self.saveFileNameShow.text(),
-            'inputsFileName': self.saveInputsFile.text()
+            'inputsFileName': self.saveInputsFile.text(),
+             # Second LSC parameters
+            'enableSecondLSC': self.enableSecondLSC.isChecked(),
+            'shape2': self.inputShape2.currentText() if self.enableSecondLSC.isChecked() else '',
+            'STLfile2': self.STLfile2,
+            'dimX2': self.dimx2.text() if self.enableSecondLSC.isChecked() else '',
+            'dimY2': self.dimy2.text() if self.enableSecondLSC.isChecked() else '',
+            'dimZ2': self.dimz2.text() if self.enableSecondLSC.isChecked() else '',
+            'lumophore2': self.lumophore2.currentText() if self.enableSecondLSC.isChecked() else '',
+            'lumophoreConc2': self.lumophoreConc2.text() if self.enableSecondLSC.isChecked() else '',
+            'waveguideAbs2': self.waveguideAbs2.text() if self.enableSecondLSC.isChecked() else '',
+            'offsetX': self.lsc2_offsetX.text() if self.enableSecondLSC.isChecked() else '0',
+            'offsetY': self.lsc2_offsetY.text() if self.enableSecondLSC.isChecked() else '0',
+            'offsetZ': self.lsc2_offsetZ.text() if self.enableSecondLSC.isChecked() else '0'
         })
         folderName = QtWidgets.QFileDialog.getExistingDirectory(self, 'OpenFile')
         fileName = folderName + "/" + self.saveInputsFile.text() + '.txt'
@@ -413,6 +494,40 @@ class testingQT(QWidget):
             # print(LSC.geometry.trimesh.extents)
             LSC.location = [0,0,0]
             return LSC
+        
+        def createMeshLSC2(self, wavAbs, wavN):
+            LSC2 = Node(
+                name = "LSC2_Waveguide",
+                geometry = 
+                Mesh(
+                    trimesh = trimesh.load(self.STLfile2),
+                    material = Material(
+                        refractive_index = wavN,
+                        components = [
+                            Absorber(coefficient = wavAbs*1.00), 
+                            Scatterer(coefficient = wavAbs*0.00)
+                            ]
+                    ),
+                ),
+                parent = world
+            )
+            LSC2.location = [0,0,0]
+            return LSC2
+
+        def addWaveguideSurfaces(LSC2):
+            """Configure surface properties for the waveguide LSC"""
+            class WaveguideSurface(FresnelSurfaceDelegate):
+                def reflectivity(self, surface, ray, geometry, container, adjacent):
+                    # Custom reflectivity for waveguide
+                    # You can add total internal reflection logic here
+                    return super(WaveguideSurface, self).reflectivity(surface, ray, geometry, container, adjacent)
+                
+                def transmitted_direction(self, surface, ray, geometry, container, adjacent):
+                    # Handle light transmission between LSCs
+                    return super(WaveguideSurface, self).transmitted_direction(surface, ray, geometry, container, adjacent)
+            
+            LSC2.geometry.material.surface = Surface(delegate = WaveguideSurface())
+            return LSC2
         
         def addLR305(LSC, LumConc, LumPLQY):
             wavelength_range = (wavMin, wavMax)
@@ -682,7 +797,8 @@ class testingQT(QWidget):
             
             return entrance_rays, exit_rays, exit_norms, k
         
-        def analyzeResults(entrance_rays, exit_rays, exit_norms):
+        def analyzeResults(self, entrance_rays, exit_rays, exit_norms):
+            # Primary LSC (LSC1) results
             edge_emit = 0
             edge_emit_left = 0
             edge_emit_right = 0
@@ -690,86 +806,186 @@ class testingQT(QWidget):
             edge_emit_back = 0
             edge_emit_bottom = 0
             edge_emit_top = 0
+            
+            # Second LSC (LSC2/Waveguide) results
+            edge_emit_lsc2 = 0
+            edge_emit_left_lsc2 = 0
+            edge_emit_right_lsc2 = 0
+            edge_emit_front_lsc2 = 0
+            edge_emit_back_lsc2 = 0
+            edge_emit_bottom_lsc2 = 0
+            edge_emit_top_lsc2 = 0
+            
             entrance_wavs = []
             exit_wavs = []
             emit_wavs = []
             
-            for k in exit_norms:
-                if k[2]!= None:
-                    if((self.rotateY or self.rotateX) is False or enclosingBox):
-                        if abs(k[2]) <= 0.5:
-                            edge_emit+=1
-                        if abs(k[0]- -1)<0.1:
-                            edge_emit_left+=1
-                        if(abs(k[0]-1)<0.1):
-                            edge_emit_right+=1
-                        if(abs(k[1]- -1)<0.1):
-                            edge_emit_front+=1
-                        if(abs(k[1]-1)<0.1):
-                            edge_emit_back+=1
-                        if(abs(k[2] + 1) < 0.1):
-                            edge_emit_bottom+=1
-                        if(abs(k[2] - 1) < 0.1):
-                            edge_emit_top +=1
-                    elif self.rotateX is True:
-                        if abs(k[1]) <= 0.5:
-                            edge_emit+=1
-                        if abs(k[0]- -1)<0.1:
-                            edge_emit_left+=1
-                        if(abs(k[0]-1)<0.1):
-                            edge_emit_right+=1
-                        if(abs(k[2]- -1)<0.1):
-                            edge_emit_front+=1
-                        if(abs(k[2]-1)<0.1):
-                            edge_emit_back+=1
-                        if(abs(k[1] + 1) < 0.1):
-                            edge_emit_bottom+=1
-                        if(abs(k[1] - 1)<0.1):
-                            edge_emit_top +=1
-                    elif self.rotateY is True:
-                        if abs(k[0]) <= 0.5:
-                            edge_emit+=1
-                        if abs(k[2]- -1)<0.1:
-                            edge_emit_left+=1
-                        if(abs(k[2]-1)<0.1):
-                            edge_emit_right+=1
-                        if(abs(k[1]- -1)<0.1):
-                            edge_emit_front+=1
-                        if(abs(k[1]-1)<0.1):
-                            edge_emit_back+=1
-                        if(abs(k[0] + 1) < 0.1):
-                            edge_emit_bottom+=1
+            # Get LSC dimensions and positions for boundary checking
+            LSCdimX = float(self.dimx.text())
+            LSCdimY = float(self.dimy.text())
+            LSCdimZ = float(self.dimz.text())
+            
+            enableSecondLSC = self.enableSecondLSC.isChecked()
+            if enableSecondLSC:
+                LSC2dimX = float(self.dimx2.text())
+                LSC2dimY = float(self.dimy2.text())
+                LSC2dimZ = float(self.dimz2.text())
+                offsetX = float(self.lsc2_offsetX.text())
+                offsetY = float(self.lsc2_offsetY.text())
+                offsetZ = float(self.lsc2_offsetZ.text())
+
+            def isPositionInLSC1(position):
+                """Check if position is within LSC1 boundaries"""
+                return (abs(position[0]) <= LSCdimX/2 and 
+                        abs(position[1]) <= LSCdimY/2 and 
+                        abs(position[2]) <= LSCdimZ/2)
+            
+            def isPositionInLSC2(position):
+                """Check if position is within LSC2 boundaries"""
+                if not enableSecondLSC:
+                    return False
+                return (abs(position[0] - offsetX) <= LSC2dimX/2 and 
+                        abs(position[1] - offsetY) <= LSC2dimY/2 and 
+                        abs(position[2] - offsetZ) <= LSC2dimZ/2)
+
+            # Analyze each exit ray
+            for index, k in enumerate(exit_norms):
+                if k[2] != None:
+                    exit_position = exit_rays[index].position
                     
-            print("\n Optical efficiency: " + str(edge_emit/numRays) + "\n")
-            print("\t\tLeft \tRight \tFront \tBack \n")
-            print("Edge emission\t" + str(edge_emit_left/numRays) + " \t" + str(edge_emit_right/numRays)+" \t" + str(edge_emit_front/numRays) + " \t" + str(edge_emit_back/numRays) + " \n")
-            print("Bottom emission\t" + str(edge_emit_bottom/numRays) + "\t Absorption coeff " + str(-np.log10(edge_emit_bottom/numRays)/float(self.dimz.text())) + "\n")
-            print("Top emission\t" + str(edge_emit_top/numRays) +"\n")
-            if(self.saveFileName != ''):
+                    # Determine which LSC this exit belongs to
+                    is_from_lsc1 = isPositionInLSC1(exit_position)
+                    is_from_lsc2 = isPositionInLSC2(exit_position)
+                    
+                    # Handle rotation cases for LSC1
+                    if is_from_lsc1:
+                        if((self.rotateY or self.rotateX) is False or self.enclosingBox.isChecked()):
+                            if abs(k[2]) <= 0.5:
+                                edge_emit += 1
+                            if abs(k[0] - (-1)) < 0.1:
+                                edge_emit_left += 1
+                            if abs(k[0] - 1) < 0.1:
+                                edge_emit_right += 1
+                            if abs(k[1] - (-1)) < 0.1:
+                                edge_emit_front += 1
+                            if abs(k[1] - 1) < 0.1:
+                                edge_emit_back += 1
+                            if abs(k[2] + 1) < 0.1:
+                                edge_emit_bottom += 1
+                            if abs(k[2] - 1) < 0.1:
+                                edge_emit_top += 1
+                        elif self.rotateX is True:
+                            if abs(k[1]) <= 0.5:
+                                edge_emit += 1
+                            if abs(k[0] - (-1)) < 0.1:
+                                edge_emit_left += 1
+                            if abs(k[0] - 1) < 0.1:
+                                edge_emit_right += 1
+                            if abs(k[2] - (-1)) < 0.1:
+                                edge_emit_front += 1
+                            if abs(k[2] - 1) < 0.1:
+                                edge_emit_back += 1
+                            if abs(k[1] + 1) < 0.1:
+                                edge_emit_bottom += 1
+                            if abs(k[1] - 1) < 0.1:
+                                edge_emit_top += 1
+                        elif self.rotateY is True:
+                            if abs(k[0]) <= 0.5:
+                                edge_emit += 1
+                            if abs(k[2] - (-1)) < 0.1:
+                                edge_emit_left += 1
+                            if abs(k[2] - 1) < 0.1:
+                                edge_emit_right += 1
+                            if abs(k[1] - (-1)) < 0.1:
+                                edge_emit_front += 1
+                            if abs(k[1] - 1) < 0.1:
+                                edge_emit_back += 1
+                            if abs(k[0] + 1) < 0.1:
+                                edge_emit_bottom += 1
+                    
+                    # Handle LSC2 analysis (assuming no rotation for simplicity)
+                    elif is_from_lsc2:
+                        if abs(k[2]) <= 0.5:
+                            edge_emit_lsc2 += 1
+                        if abs(k[0] - (-1)) < 0.1:
+                            edge_emit_left_lsc2 += 1
+                        if abs(k[0] - 1) < 0.1:
+                            edge_emit_right_lsc2 += 1
+                        if abs(k[1] - (-1)) < 0.1:
+                            edge_emit_front_lsc2 += 1
+                        if abs(k[1] - 1) < 0.1:
+                            edge_emit_back_lsc2 += 1
+                        if abs(k[2] + 1) < 0.1:
+                            edge_emit_bottom_lsc2 += 1
+                        if abs(k[2] - 1) < 0.1:
+                            edge_emit_top_lsc2 += 1
+
+            # Calculate total rays
+            numRays = len(entrance_rays)
+            
+            # Print results with clear separation between LSCs
+            print("\n=== PRIMARY LSC (LSC1) RESULTS ===")
+            print("Optical efficiency: " + str(edge_emit/numRays))
+            print("\t\tLeft \tRight \tFront \tBack")
+            print("Edge emission\t" + str(edge_emit_left/numRays) + " \t" + str(edge_emit_right/numRays) + " \t" + str(edge_emit_front/numRays) + " \t" + str(edge_emit_back/numRays))
+            print("Bottom emission\t" + str(edge_emit_bottom/numRays) + "\t Absorption coeff " + str(-np.log10(max(edge_emit_bottom/numRays, 1e-10))/float(self.dimz.text())))
+            print("Top emission\t" + str(edge_emit_top/numRays))
+            
+            if enableSecondLSC:
+                print("\n=== WAVEGUIDE LSC (LSC2) RESULTS ===")
+                print("Optical efficiency: " + str(edge_emit_lsc2/numRays))
+                print("\t\tLeft \tRight \tFront \tBack")
+                print("Edge emission\t" + str(edge_emit_left_lsc2/numRays) + " \t" + str(edge_emit_right_lsc2/numRays) + " \t" + str(edge_emit_front_lsc2/numRays) + " \t" + str(edge_emit_back_lsc2/numRays))
+                print("Bottom emission\t" + str(edge_emit_bottom_lsc2/numRays))
+                print("Top emission\t" + str(edge_emit_top_lsc2/numRays))
+                
+                print("\n=== SYSTEM TOTALS ===")
+                total_edge_emit = edge_emit + edge_emit_lsc2
+                print("Combined optical efficiency: " + str(total_edge_emit/numRays))
+                print("Light transfer efficiency (LSC2→LSC1): " + str(edge_emit/max(edge_emit_lsc2, 1)))
+
+            # Save results to file
+            if self.saveFileName != '':
+                dataFile.write("\n=== PRIMARY LSC (LSC1) RESULTS ===\n")
                 dataFile.write("Opt eff\t" + str(edge_emit/numRays) + "\n")
-                dataFile.write("\t\tLeft \tRight \tFront \tBack \n")
-                dataFile.write("Edge emission\t" + str(edge_emit_left/numRays) + " \t" + str(edge_emit_right/numRays)+" \t" + str(edge_emit_front/numRays) + " \t" + str(edge_emit_back/numRays) + " \n")
-                dataFile.write("type\tposx\tposy\tposz\tdirx\tdiry\tdirz\tsurfx\tsurfy\tsurfz\twav\n")
-                dataFile.write("Bottom emission\t" + str(edge_emit_bottom/numRays) + "\t Absorption coeff " + str(-np.log10(edge_emit_bottom/numRays)/float(self.dimz.text())) + "\n")
-                dataFile.write("Top emission\t" + str(edge_emit_top/numRays) +"\n")
+                dataFile.write("\t\tLeft \tRight \tFront \tBack\n")
+                dataFile.write("Edge emission\t" + str(edge_emit_left/numRays) + " \t" + str(edge_emit_right/numRays) + " \t" + str(edge_emit_front/numRays) + " \t" + str(edge_emit_back/numRays) + "\n")
+                dataFile.write("Bottom emission\t" + str(edge_emit_bottom/numRays) + "\t Absorption coeff " + str(-np.log10(max(edge_emit_bottom/numRays, 1e-10))/float(self.dimz.text())) + "\n")
+                dataFile.write("Top emission\t" + str(edge_emit_top/numRays) + "\n")
+                
+                if enableSecondLSC:
+                    dataFile.write("\n=== WAVEGUIDE LSC (LSC2) RESULTS ===\n")
+                    dataFile.write("LSC2 Opt eff\t" + str(edge_emit_lsc2/numRays) + "\n")
+                    dataFile.write("LSC2 Edge emission\t" + str(edge_emit_left_lsc2/numRays) + " \t" + str(edge_emit_right_lsc2/numRays) + " \t" + str(edge_emit_front_lsc2/numRays) + " \t" + str(edge_emit_back_lsc2/numRays) + "\n")
+                    dataFile.write("Combined Opt eff\t" + str((edge_emit + edge_emit_lsc2)/numRays) + "\n")
+                
+                # Write ray data
+                dataFile.write("type\tposx\tposy\tposz\tdirx\tdiry\tdirz\tsurfx\tsurfy\tsurfz\twav\tLSC\n")
                 for ray in entrance_rays:
                     dataFile.write("entrance\t")
                     for k in range(3):
-                        dataFile.write(str(ray.position[k])+"\t")
+                        dataFile.write(str(ray.position[k]) + "\t")
                     for k in range(3):
-                        dataFile.write(str(ray.direction[k])+"\t")
+                        dataFile.write(str(ray.direction[k]) + "\t")
                     for k in range(3):
                         dataFile.write('None \t')
-                    dataFile.write(str(ray.wavelength) + "\n")
+                    dataFile.write(str(ray.wavelength) + "\tN/A\n")
+                
                 for index, ray in enumerate(exit_rays):
+                    exit_position = ray.position
+                    lsc_source = "LSC1" if isPositionInLSC1(exit_position) else ("LSC2" if isPositionInLSC2(exit_position) else "Unknown")
+                    
                     dataFile.write("exit \t")
                     for k in range(3):
-                        dataFile.write(str(ray.position[k])+"\t")
+                        dataFile.write(str(ray.position[k]) + "\t")
                     for k in range(3):
-                        dataFile.write(str(ray.direction[k])+"\t")
+                        dataFile.write(str(ray.direction[k]) + "\t")
                     for k in range(3):
-                        dataFile.write(str(exit_norms[index][k])+"\t")
-                    dataFile.write(str(ray.wavelength) + "\n")
+                        dataFile.write(str(exit_norms[index][k]) + "\t")
+                    dataFile.write(str(ray.wavelength) + "\t" + lsc_source + "\n")
+
+            # Continue with existing wavelength and plotting analysis...
+            # [Rest of the function remains the same for plotting]
             xpos_ent = []
             ypos_ent = []
             xpos_exit = []
@@ -957,6 +1173,30 @@ class testingQT(QWidget):
             maxZ = LSCdimX
         
         world = createWorld(max(LSCdimX, LSCdimY, maxZ))
+
+        enableSecondLSC = self.enableSecondLSC.isChecked()
+        if enableSecondLSC:
+            LSC2dimX = float(self.dimx2.text())
+            LSC2dimY = float(self.dimy2.text())
+            LSC2dimZ = float(self.dimz2.text())
+            LSC2shape = self.inputShape2.currentText()
+            LumType2 = self.lumophore2.currentText()
+            LumConc2 = float(self.lumophoreConc2.text())
+            LumPLQY2 = float(self.lumophorePLQY2.text())
+            wavAbs2 = float(self.waveguideAbs2.text())
+            wavN2 = float(self.waveguideN2.text())
+            
+            # Positioning offsets
+            offsetX = float(self.lsc2_offsetX.text())
+            offsetY = float(self.lsc2_offsetY.text())
+            offsetZ = float(self.lsc2_offsetZ.text())
+        
+        # Create world with larger dimensions to accommodate both LSCs
+        if enableSecondLSC:
+            maxDim = max(LSCdimX, LSCdimY, maxZ, LSC2dimX, LSC2dimY, LSC2dimZ)
+            world = createWorld(maxDim * 2)
+        else:
+            world = createWorld(max(LSCdimX, LSCdimY, maxZ))
         
         if(enclosingBox):
             enclBox = createBoxLSC(LSCdimX*1.32, LSCdimY*1.32, LSCdimZ*1.1,0,wavN)
@@ -1019,6 +1259,28 @@ class testingQT(QWidget):
         LSC = addSolarCells(LSC, solLeft, solRight, solFront, solBack, solAll)
         
         LSC = addBottomSurf(LSC, bottomMir, bottomScat)
+
+        # Create second LSC (waveguide)
+        if enableSecondLSC:
+            if(LSC2shape == 'Box'):
+                LSC2 = createBoxLSC(LSC2dimX, LSC2dimY, LSC2dimZ, wavAbs2, wavN2)
+            elif(LSC2shape == 'Cylinder'):
+                LSC2 = createCylLSC(LSC2dimX, LSC2dimZ, wavAbs2, wavN2)
+            elif(LSC2shape == 'Sphere'):
+                LSC2 = createSphLSC(LSC2dimX, wavAbs2, wavN2)
+            elif(LSC2shape == 'Import Mesh'):
+                LSC2 = createMeshLSC2(self, wavAbs2, wavN2)
+            
+            # Position the second LSC
+            LSC2.location = [offsetX, offsetY, offsetZ]
+            LSC2.name = "LSC2_Waveguide"
+            
+            # Add lumophore to second LSC if needed
+            if(LumType2 == 'Lumogen Red'):
+                LSC2, x2, abs_spec2, ems_spec2 = addLR305(LSC2, LumConc2, LumPLQY2)
+            
+            # Configure second LSC surfaces (waveguide properties)
+            LSC2 = addWaveguideSurfaces(LSC2)
         
         wavelengths, intensity, light = initLight(lightWavMin, lightWavMax)
         if(lightPattern == 'Rectangle Mask'):
