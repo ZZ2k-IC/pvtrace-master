@@ -1302,6 +1302,182 @@ class testingQT(QWidget):
         else:
             world = createWorld(max(LSCdimX, LSCdimY, maxZ))
         
+        # ADD PVTRACE FIXES - Insert after world creation around line 1301
+        import pvtrace.algorithm.photon_tracer as photon_tracer
+        from pvtrace.algorithm.photon_tracer import next_hit, Event, find_container
+
+        original_next_hit = photon_tracer.next_hit
+        original_follow = photon_tracer.follow
+        original_find_container = photon_tracer.find_container
+
+        def corrected_find_container(intersections):
+            """Fixed container detection that ignores detectors"""
+            if len(intersections) == 0:
+                return None
+            if len(intersections) == 1:
+                return intersections[0].hit
+            
+            # Filter out detectors - they can't be containers
+            container_candidates = []
+            for intersection in intersections:
+                if "Detector" not in intersection.hit.name:
+                    container_candidates.append(intersection)
+            
+            # If no valid containers found, use World
+            if len(container_candidates) == 0:
+                for intersection in intersections:
+                    if intersection.hit.name == "World":
+                        return intersection.hit
+                return intersections[0].hit  # Fallback
+            
+            # Use original logic on filtered candidates
+            if len(container_candidates) == 1:
+                return container_candidates[0].hit
+            return original_find_container(container_candidates)
+        
+        # Apply the fix
+        photon_tracer.find_container = corrected_find_container
+
+        def priority_next_hit(scene, ray):
+            """Modified next_hit that prioritizes LSC2_Waveguide over LSC when overlapping"""
+            
+            result = original_next_hit(scene, ray)
+            if result is None:
+                return None
+                
+            hit, (container, adjacent), point, full_distance = result
+            
+            # PRIORITY RULE: If ray is inside LSC2_Waveguide, ignore LSC intersections
+            if container.name == "LSC2_Waveguide":
+                # Ray is inside waveguide - filter out absorber intersections
+                intersections = scene.intersections(ray.position, ray.direction)
+                intersections = [x for x in intersections if not np.isclose(x.distance, 0.0)]
+                intersections = [x.to(scene.root) for x in intersections]
+                
+                # Remove LSC (absorber) intersections when inside LSC2_Waveguide
+                filtered_intersections = []
+                for intersection in intersections:
+                    if intersection.hit.name != "LSC":  # LSC is the absorber
+                        filtered_intersections.append(intersection)
+                
+                if filtered_intersections:
+                    # Sort by distance and take closest non-absorber intersection
+                    filtered_intersections.sort(key=lambda x: x.distance)
+                    hit = filtered_intersections[0].hit
+                    point = filtered_intersections[0].point
+                    full_distance = filtered_intersections[0].distance
+                    
+                    # Recalculate adjacent for the new hit
+                    if hit == container:
+                        # Ray hitting waveguide surface from inside
+                        adjacent = scene.root  # World
+                    else:
+                        # Ray hitting something else
+                        adjacent = hit
+                        
+                    return hit, (container, adjacent), point, full_distance
+            
+            # For all other cases, use original result
+            return result
+        
+        photon_tracer.next_hit = priority_next_hit
+
+        def corrected_follow(scene, ray, maxsteps=1000, maxpathlength=np.inf, emit_method='kT'):
+            count = 0
+            history = [(ray, (None,None,None), Event.GENERATE)]
+            
+            while True:
+                count += 1
+                if count > maxsteps or ray.travelled > maxpathlength:
+                    history.append((ray, (None,None,None), Event.KILL))
+                    break
+
+                if ray.direction == (0.0, 0.0, 0.0):
+                    history.append((ray, (None,None,None), Event.DETECT))
+                    break
+            
+                info = next_hit(scene, ray)
+                if info is None:
+                    history.append((ray, (None,None,None), Event.EXIT))
+                    break
+
+                hit, (container, adjacent), point, full_distance = info
+                if hit is scene.root:
+                    history.append((ray.propagate(full_distance), (None,None,None), Event.EXIT))
+                    break
+
+                # FIX: Correct adjacent detection for waveguide surfaces
+                if hit.name == "LSC2_Waveguide" and container.name == "LSC2_Waveguide":
+                    # Ray is inside waveguide hitting waveguide surface
+                    # Adjacent should always be World (air), not absorber
+                    corrected_adjacent = scene.root  # Now world exists in scope
+                else:
+                    # Use original adjacent for other cases
+                    corrected_adjacent = adjacent
+                
+                material = container.geometry.material
+                absorbed, at_distance = material.is_absorbed(ray, full_distance)
+                
+                if absorbed and at_distance < full_distance:
+                    ray = ray.propagate(at_distance)
+                    component = material.component(ray.wavelength)
+                    if component is not None and component.is_radiative(ray):
+                        ray = component.emit(ray.representation(scene.root, container), method=emit_method)
+                        ray = ray.representation(container, scene.root)
+                        if isinstance(component, Luminophore):
+                            event = Event.EMIT
+                        elif isinstance(component, Scatterer):
+                            event = Event.SCATTER
+                        else:
+                            event = Event.SCATTER
+                        history.append((ray, (None,None,None), event))
+                        continue
+                    else:
+                        history.append((ray, (None,None,None), Event.ABSORB))
+                        break
+                else:
+                    ray = ray.propagate(full_distance)
+                    surface = hit.geometry.material.surface
+                    ray = ray.representation(scene.root, hit)
+                    
+                    # Use corrected adjacent for surface interactions
+                    if surface.is_reflected(ray, hit.geometry, container, corrected_adjacent):
+                        ray = surface.reflect(ray, hit.geometry, container, corrected_adjacent)
+                        ray = ray.representation(hit, scene.root)
+                        
+                        try:
+                            local_pos = list(np.array(ray.position) - np.array(hit.location))
+                            normal = hit.geometry.normal(local_pos)
+                        except:
+                            normal = (None, None, None)
+                            
+                        history.append((ray, normal, Event.REFLECT))
+                        continue
+                    else:
+                        ref_ray = surface.transmit(ray, hit.geometry, container, corrected_adjacent)
+                        if ref_ray is None:
+                            history.append((ray, (None,None,None), Event.KILL))
+                            break
+                            
+                        ray = ref_ray
+                        ray = ray.representation(hit, scene.root)
+                        
+                        try:
+                            local_pos = list(np.array(ray.position) - np.array(hit.location))
+                            normal = hit.geometry.normal(local_pos)
+                        except:
+                            normal = (None, None, None)
+                            
+                        history.append((ray, normal, Event.TRANSMIT))
+                        continue
+                        
+            return history
+
+        # Apply the fixes
+        photon_tracer.find_container = corrected_find_container
+        photon_tracer.next_hit = priority_next_hit
+        photon_tracer.follow = corrected_follow
+
         if(enclosingBox):
             enclBox = createBoxLSC(LSCdimX*1.32, LSCdimY*1.32, LSCdimZ*1.1,0,wavN)
             if(len(widget.LSCbounds)>0):
