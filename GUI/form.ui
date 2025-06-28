@@ -1252,48 +1252,6 @@
      </property>
     </widget>
     
-    <widget class="QLabel" name="label_51_2nd">
-     <property name="geometry">
-      <rect>
-       <x>310</x>
-       <y>130</y>
-       <width>171</width>
-       <height>21</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>Waveguide background abs.</string>
-     </property>
-    </widget>
-    
-    <widget class="QLineEdit" name="lineEdit_23_2nd">
-     <property name="geometry">
-      <rect>
-       <x>500</x>
-       <y>130</y>
-       <width>41</width>
-       <height>21</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>0.0</string>
-     </property>
-    </widget>
-    
-    <widget class="QLabel" name="label_55_2nd">
-     <property name="geometry">
-      <rect>
-       <x>545</x>
-       <y>130</y>
-       <width>31</width>
-       <height>21</height>
-      </rect>
-     </property>
-     <property name="text">
-      <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;cm&lt;span style=&quot; vertical-align:super;&quot;&gt;-1&lt;/span&gt;&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
-     </property>
-    </widget>
-    
     <!-- LSC2 Positioning -->
     <widget class="QLabel" name="label_positioning">
      <property name="geometry">
