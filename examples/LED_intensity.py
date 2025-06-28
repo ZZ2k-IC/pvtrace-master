@@ -24,6 +24,18 @@ box = Node(
     parent=world
 )
 """
+
+box_abs = Node(
+    name="box (absorbing)",
+    geometry=Box(
+        (1, 1, 0.2),
+        material=Material(refractive_index=1.5,
+            components = [Absorber(coefficient = 100.0)])
+    ),
+    parent=world
+)
+box_abs.translate((0, 0, 6.3))
+
 cylinder = Node(
     name="Cylinder (fused quartz)",
     geometry=Cylinder(
