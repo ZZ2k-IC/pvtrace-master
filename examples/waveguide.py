@@ -193,7 +193,7 @@ absorber = Node(
         (3, 3, 1.2),
         material=Material(
             refractive_index=1.0,
-            components=[Absorber(coefficient=100.0)]  # Set absorption here
+            components=[Absorber(coefficient=1000000.0)]  # Set absorption here
         )
     ),
     parent=world
@@ -207,7 +207,8 @@ waveguide = Node(
         length=6,
         radius=1.5,
         material=Material(
-            refractive_index=1.5  # No absorber, just refract/reflect
+            refractive_index=1.5,  # No absorber, just refract/reflect
+            components=[Absorber(coefficient=0.001)]
         )
     ),
     parent=world

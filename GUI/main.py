@@ -319,6 +319,7 @@ class testingQT(QWidget):
             'dimZ2': self.dimz2.text() if self.enableSecondLSC.isChecked() else '',
             'lumophore2': self.lumophore2.currentText() if self.enableSecondLSC.isChecked() else '',
             'lumophoreConc2': self.lumophoreConc2.text() if self.enableSecondLSC.isChecked() else '',
+            'waveguideAbs2': self.waveguideAbs2.text() if self.enableSecondLSC.isChecked() else '',
             'offsetX': self.lsc2_offsetX.text() if self.enableSecondLSC.isChecked() else '0',
             'offsetY': self.lsc2_offsetY.text() if self.enableSecondLSC.isChecked() else '0',
             'offsetZ': self.lsc2_offsetZ.text() if self.enableSecondLSC.isChecked() else '0'
@@ -421,6 +422,9 @@ class testingQT(QWidget):
     def runPVTrace(self, dataFile):
         print('Input Received')
 
+        # CRITICAL: Reset PVTrace state between runs
+        self.resetPVTraceState()
+
         enableSecondLSC = self.enableSecondLSC.isChecked()
         if enableSecondLSC:
             LSC2dimX = float(self.dimx2.text())
@@ -430,6 +434,7 @@ class testingQT(QWidget):
             LumType2 = self.lumophore2.currentText()
             LumConc2 = float(self.lumophoreConc2.text())
             LumPLQY2 = float(self.lumophorePLQY2.text())
+            wavAbs2 = float(self.waveguideAbs2.text())
             wavN2 = float(self.waveguideN2.text())
             
             # Positioning offsets
@@ -467,20 +472,6 @@ class testingQT(QWidget):
             
             return LSC
         
-        def createBoxWaveguide(dimX, dimY, dimZ, wavN):
-            LSC = Node(
-                name = "LSC",
-                geometry = 
-                Box(
-                    (dimX, dimY, dimZ),
-                    material = Material(
-                        refractive_index = wavN
-                    ),
-                ),
-                parent = world
-            )
-            
-            return LSC
         
         def createCylLSC(dimXY, dimZ, wavAbs, wavN):
             LSC = Node(
@@ -500,20 +491,6 @@ class testingQT(QWidget):
             
             return LSC
         
-        def createCylWaveguide(dimXY, dimZ, wavN):
-            LSC = Node(
-                name = "LSC",
-                geometry = 
-                Cylinder(
-                    dimZ, dimXY/2,
-                    material = Material(
-                        refractive_index = wavN
-                    ),
-                ),
-                parent = world
-            )
-            
-            return LSC
         
         def createSphLSC(dimXYZ, wavAbs, wavN):
             LSC = Node(
@@ -533,20 +510,6 @@ class testingQT(QWidget):
             
             return LSC
         
-        def createSphWaveguide(dimXYZ, wavAbs, wavN):
-            LSC = Node(
-                name = "LSC",
-                geometry = 
-                Sphere(
-                    dimXYZ/2,
-                    material = Material(
-                        refractive_index = wavN
-                    ),
-                ),
-                parent = world
-            )
-            
-            return LSC
 
         def createMeshLSC(self, wavAbs, wavN):
             LSC = Node(
@@ -568,22 +531,6 @@ class testingQT(QWidget):
             LSC.location = [0,0,0]
             return LSC
             
-        
-        
-        def createMeshWaveguide(self, wavAbs, wavN):
-            LSC2 = Node(
-                name = "LSC2_Waveguide",
-                geometry = 
-                Mesh(
-                    trimesh = trimesh.load(self.STLfile2),
-                    material = Material(
-                        refractive_index = wavN
-                    ),
-                ),
-                parent = world
-            )
-            LSC2.location = [0,0,0]
-            return LSC2
 
         def addWaveguideSurfaces(LSC2):
             """Configure surface properties for the waveguide LSC"""
@@ -1582,13 +1529,13 @@ class testingQT(QWidget):
         # Create second LSC (waveguide)
         if enableSecondLSC:
             if(LSC2shape == 'Box'):
-                LSC2 = createBoxLSC(LSC2dimX, LSC2dimY, LSC2dimZ, wavN2)
+                LSC2 = createBoxLSC(LSC2dimX, LSC2dimY, LSC2dimZ, wavAbs2, wavN2)
             elif(LSC2shape == 'Cylinder'):
-                LSC2 = createCylWaveguide(LSC2dimX, LSC2dimZ, wavN2)
+                LSC2 = createCylLSC(LSC2dimX, LSC2dimZ, wavAbs2, wavN2)
             elif(LSC2shape == 'Sphere'):
-                LSC2 = createSphWaveguide(LSC2dimX, wavN2)
+                LSC2 = createSphLSC(LSC2dimX, wavAbs2, wavN2)
             elif(LSC2shape == 'Import Mesh'):
-                LSC2 = createMeshWaveguide(self, wavN2)
+                LSC2 = createMeshLSC(self, wavAbs2, wavN2)
             
             # Position the second LSC
             LSC2.location = [offsetX, offsetY, offsetZ]
@@ -1675,7 +1622,29 @@ class testingQT(QWidget):
         analyzeResults(entrance_rays, exit_rays, exit_norms, absorbed_rays)
         return entrance_rays, exit_rays, exit_norms
         
+    def resetPVTraceState(self):
+        """Reset PVTrace to original state between simulations"""
+        print("Resetting PVTrace state for new simulation...")
         
+        # Restore original PVTrace functions
+        import pvtrace.algorithm.photon_tracer as photon_tracer
+        
+        # Re-import to get fresh original functions
+        import importlib
+        importlib.reload(photon_tracer)
+        
+        # Clear any cached detector states
+        if hasattr(self, 'current_detector'):
+            self.current_detector = None
+        if hasattr(self, 'detector_initial_count'):
+            self.detector_initial_count = 0
+        
+        # Clear any other persistent states
+        if hasattr(self, 'scene'):
+            delattr(self, 'scene')
+        
+        print("PVTrace state reset complete")
+
 #%% main
 if __name__ == "__main__":
     QtCore.QCoreApplication.setAttribute(QtCore.Qt.AA_ShareOpenGLContexts)

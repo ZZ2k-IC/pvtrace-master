@@ -4,15 +4,15 @@ from scipy.interpolate import CubicSpline
 from scipy.optimize import fsolve
 
 # parameters
-n_wg = 1.5             # waveguide refractive index
-n_abs = 10.0            # absorber refractive index (same as outside)
+n_wg = 1.4             # waveguide refractive index
+n_abs = 1.6            # absorber refractive index (same as outside)
 alpha = 1.0            # absorption coefficient
 rectangle_width = 1.0  
 rectangle_height = 0.5
 num_rays = 300        # number of rays
 
 # define interface curve using cubic spline with 20 control points
-"""
+
 def create_interface_curve():
     # Create 20 control points for the interface
     x_control = np.linspace(0, rectangle_width, 20)
@@ -25,8 +25,8 @@ def create_interface_curve():
     # Create cubic spline
     spline = CubicSpline(x_control, y_control, bc_type='natural')
     return spline, x_control, y_control
-"""
 
+"""
 def create_interface_curve():
     # Create 20 control points for the interface
     x_control = np.linspace(0, rectangle_width, 20)
@@ -53,7 +53,31 @@ def create_interface_curve():
     # Create cubic spline
     spline = CubicSpline(x_control, y_control, bc_type='natural')
     return spline, x_control, y_control
-
+"""
+"""
+def create_interface_curve():
+    # Create 20 control points for the interface
+    x_control = np.linspace(0, rectangle_width, 20)
+    
+    # Adjustable parabolic curve
+    # y = height * (1 - (x/width)^power)
+    
+    power = 2.0  # 2.0 = parabola, higher = steeper fall, lower = gentler fall
+    
+    x_normalized = x_control / rectangle_width  # Normalize to [0, 1]
+    
+    # Parabolic fall with adjustable steepness
+    y_control = rectangle_height * (1 - x_normalized**power)
+    
+    # Ensure exact boundary conditions
+    y_control[0] = rectangle_height  # Start at top
+    y_control[-1] = 0                # End at bottom
+    
+    # Create cubic spline
+    spline = CubicSpline(x_control, y_control, bc_type='natural')
+    return spline, x_control, y_control
+"""
+    
 # Fresnel reflection and transmission coefficients
 def fresnel_coefficients(theta_i, n1, n2):
     """Calculate Fresnel coefficients for s-polarized light"""
@@ -197,7 +221,7 @@ def intersect_boundaries(ray):
     
     return None, None
 
-# simulate ray propagation with Fresnel effects
+# simulate ray propagation with Fresnel effects - CORRECTED VERSION
 def simulate_ray(ray, spline, max_bounces=50):
     absorbed_points = []
     current_ray = ray.copy()
@@ -226,21 +250,36 @@ def simulate_ray(ray, spline, max_bounces=50):
         intersections.sort(key=lambda x: x[1])
         intersection_point, t, intersection_type = intersections[0]
         
-        # Calculate absorption along the path
-        path_length = t
+        # CORRECTED ABSORPTION SIMULATION
+        # Sample absorption along the ray path, not just at intersection
         current_x = origin[0]
-        
-        # Check if ray starts in absorber region
         try:
-            if origin[1] > spline(current_x):  # In absorber
-                absorbed_intensity = intensity * (1 - np.exp(-alpha * path_length))
-                if absorbed_intensity > 1e-6:  # Only record significant absorption
-                    absorbed_points.append([intersection_point[0], intersection_point[1], absorbed_intensity])
-                intensity *= np.exp(-alpha * path_length)
+            if origin[1] > spline(current_x):  # Starting in absorber
+                # Sample multiple points along the ray path for absorption
+                num_samples = max(10, int(t * 100))  # More samples for longer paths
+                t_samples = np.linspace(0, t, num_samples)
+                
+                for i, t_sample in enumerate(t_samples[1:]):  # Skip origin
+                    sample_point = origin + t_sample * direction
+                    
+                    # Check if this point is still in absorber
+                    if (0 <= sample_point[0] <= rectangle_width and 
+                        0 <= sample_point[1] <= rectangle_height and
+                        sample_point[1] > spline(sample_point[0])):
+                        
+                        # Calculate absorption for this segment
+                        dt = t_samples[i+1] - t_samples[i] if i > 0 else t_sample
+                        absorbed_intensity = intensity * alpha * dt * np.exp(-alpha * t_sample)
+                        
+                        if absorbed_intensity > 1e-8:  # Record significant absorption
+                            absorbed_points.append([sample_point[0], sample_point[1], absorbed_intensity])
+                
+                # Update ray intensity after passing through absorber
+                intensity *= np.exp(-alpha * t)
         except:
             pass
         
-        # Handle different intersection types
+        # Handle different intersection types (same as before)
         if intersection_type == 'interface':
             # Handle Fresnel reflection/transmission at interface
             x_int = intersection_point[0]
