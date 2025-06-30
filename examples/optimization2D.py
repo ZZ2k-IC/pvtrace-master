@@ -1,15 +1,16 @@
+#%%
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline
 from scipy.optimize import fsolve
 
 # parameters
-n_wg = 1.4             # waveguide refractive index
+n_wg = 1.4585             # waveguide refractive index
 n_abs = 1.6            # absorber refractive index (same as outside)
-alpha = 1.0            # absorption coefficient
-rectangle_width = 1.0  
+alpha = 0.1            # absorption coefficient
+rectangle_width = 15.0
 rectangle_height = 0.5
-num_rays = 300        # number of rays
+num_rays = 100        # number of rays
 
 # define interface curve using cubic spline with 20 control points
 
@@ -17,9 +18,9 @@ def create_interface_curve():
     # Create 20 control points for the interface
     x_control = np.linspace(0, rectangle_width, 20)
     # Initialize with diagonal line, can be modified for optimization
-    y_control = rectangle_height - x_control * 0.5
+    y_control = rectangle_height*1 - x_control * rectangle_height / rectangle_width
     # Ensure boundary conditions
-    y_control[0] = rectangle_height
+    y_control[0] = rectangle_height*1
     y_control[-1] = 0
     
     # Create cubic spline
@@ -103,10 +104,28 @@ def fresnel_coefficients(theta_i, n1, n2):
     return R, T, theta_t
 
 # Lambertian distribution
-def lambertian_sample_theta(n, theta_max=np.pi/2):
+def lambertian_sample_theta(n, theta_max=np.pi/3):
     p = np.random.uniform(0, 1, n)
     theta = np.arcsin(np.sqrt(p) * np.sin(theta_max))
     return theta
+
+def generate_straight_rays(n, angle_deg=0):
+    """
+    Generate parallel rays with a specific angle
+    angle_deg: 0 = horizontal (rightward), 90 = vertical (upward)
+    """
+    rays = []
+    angle_rad = np.radians(angle_deg)
+    direction = np.array([np.cos(angle_rad), np.sin(angle_rad)])
+    
+    for i in range(n):
+        # Distribute ray origins uniformly along the left boundary
+        y_start = np.random.uniform(0, rectangle_height)
+        origin = np.array([0.0, y_start])
+        intensity = 1.0
+        rays.append([origin, direction, intensity])
+    
+    return rays
 
 # emit rays from left boundary
 def generate_rays(n):
@@ -145,8 +164,8 @@ def intersect_interface(ray, spline):
             return float('inf')
     
     # More robust intersection finding
-    t_max = 10.0  # Maximum parameter value to search
-    dt = 0.01     # Step size for initial search
+    t_max = rectangle_width * 2  # Maximum parameter value to search
+    dt = rectangle_width / 1000     # Step size for initial search
     
     # Find sign changes more carefully
     t_current = dt
@@ -225,6 +244,8 @@ def intersect_boundaries(ray):
 def simulate_ray(ray, spline, max_bounces=50):
     absorbed_points = []
     current_ray = ray.copy()
+    exit_info = None  # Track where ray exits
+
     
     for bounce in range(max_bounces):
         origin, direction, intensity = current_ray
@@ -244,6 +265,7 @@ def simulate_ray(ray, spline, max_bounces=50):
             intersections.append((boundary_point, t_boundary, 'boundary'))
         
         if not intersections:
+            exit_info = f"No intersections at x={origin[0]:.1f}"
             break  # No intersections found, ray exits
         
         # Sort by parameter t and take the closest
@@ -346,7 +368,11 @@ def simulate_ray(ray, spline, max_bounces=50):
                 break
         
         else:  # boundary (top or right)
-            # Ray exits the domain
+            # Track exit location
+            if intersection_point[0] >= rectangle_width - 0.1:
+                exit_info = f"Right boundary exit at x={intersection_point[0]:.1f}"
+            else:
+                exit_info = f"Top boundary exit at x={intersection_point[0]:.1f}"
             break
         
         # Safety check for intensity
@@ -400,28 +426,31 @@ plt.legend()
 plt.grid(True)
 
 # Plot 2: 2D contour plot of absorption
-# Plot 2: 2D contour plot of absorption
+# Replace lines 429-461 (the Plot 2 section):
 plt.subplot(2, 2, 2)
 if len(x_absorbed) > 0:
-    # Create 2D histogram with explicit range covering the full domain
-    bins_x = 25
-    bins_y = 25
+    # HIGH RESOLUTION SETTINGS - upgraded from 25x25 to 100x100
+    bins_x = 100  # Was max(25, int(rectangle_width * 5))
+    bins_y = 100  # Was 25
+    
     H, xedges, yedges = np.histogram2d(x_absorbed, y_absorbed, 
                                        bins=[bins_x, bins_y],
                                        range=[[0, rectangle_width], [0, rectangle_height]],
                                        weights=intensity_absorbed)
     
-    # Use imshow for perfect coverage of the domain
+    # Use better interpolation for smoother appearance
     im = plt.imshow(H.T, extent=[0, rectangle_width, 0, rectangle_height], 
-                   origin='lower', cmap='viridis', aspect='auto', interpolation='bilinear')
+                   origin='lower', cmap='viridis', aspect='auto', 
+                   interpolation='bicubic')  # Upgraded from 'bilinear'
     plt.colorbar(im, label='Absorbed intensity')
     
     # Overlay interface curve with better visibility
     plt.plot(x_curve, y_curve, 'white', linewidth=3, alpha=0.8)
     plt.plot(x_curve, y_curve, 'red', linewidth=2, alpha=1.0)
+    
 else:
     # Create empty plot with proper background
-    plt.imshow(np.zeros((20, 20)), extent=[0, rectangle_width, 0, rectangle_height], 
+    plt.imshow(np.zeros((100, 100)), extent=[0, rectangle_width, 0, rectangle_height], 
               origin='lower', cmap='viridis', aspect='auto', alpha=0.3)
     plt.colorbar(label='Absorbed intensity')
     plt.text(0.5, 0.5, 'No absorption data', ha='center', va='center', 
@@ -437,7 +466,7 @@ plt.title('2D Absorption Distribution')
 # Plot 3: 1D distribution along x-axis
 plt.subplot(2, 2, 3)
 if len(x_absorbed) > 0:
-    bins = np.linspace(0, rectangle_width, 20)
+    bins = np.linspace(0, rectangle_width, max(20, int(rectangle_width * 2)))
     bin_energy, _ = np.histogram(x_absorbed, bins=bins, weights=intensity_absorbed)
     
     plt.bar((bins[:-1] + bins[1:]) / 2, bin_energy, width=0.04, align='center')
