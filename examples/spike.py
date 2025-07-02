@@ -236,8 +236,8 @@ def intersect_interface(ray, spline, layer_offset):
         except:
             return float('inf')
     
-    t_max = 10.0
-    dt = 0.01
+    t_max = rectangle_width
+    dt = rectangle_width / 1000
     t_current = dt
     prev_val = intersection_equation(t_current)
     

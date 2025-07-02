@@ -4,13 +4,13 @@ from scipy.interpolate import CubicSpline
 from scipy.optimize import fsolve
 
 # Parameters
-n_wg = 1.45         # waveguide refractive index
+n_wg = 1.83         # waveguide refractive index
 n_abs = 1.64               # absorber refractive index
-alpha = 6.4             # absorption coefficient
+alpha = 1             # absorption coefficient
 rectangle_width = 0.5 
 rectangle_height = 0.5
 layer_gap = 0.0          # Gap between top and bottom layers
-num_rays = 100            # number of rays
+num_rays = 50            # number of rays
 
 # Total system height includes gap
 total_height = 2 * rectangle_height + layer_gap
@@ -250,8 +250,8 @@ def intersect_interface(ray, spline, layer_offset):
         except:
             return float('inf')
     
-    t_max = 10.0
-    dt = 0.01
+    t_max = rectangle_width
+    dt = rectangle_width / 1000
     t_current = dt
     prev_val = intersection_equation(t_current)
     
@@ -313,9 +313,11 @@ def intersect_layer_boundaries(ray):
     
     return intersections
 
-def simulate_dual_layer_ray(ray, spline_top, spline_bottom, max_bounces=100):
-    """Simulate ray in dual-layer system"""
+# Add this new function to track ray paths:
+def simulate_dual_layer_ray_with_paths(ray, spline_top, spline_bottom, max_bounces=100):
+    """Simulate ray in dual-layer system and return both absorption and ray paths"""
     absorbed_points = []
+    ray_paths = []  # Store all ray segments
     current_ray = ray.copy()
     
     for bounce in range(max_bounces):
@@ -349,7 +351,16 @@ def simulate_dual_layer_ray(ray, spline_top, spline_bottom, max_bounces=100):
         intersections.sort(key=lambda x: x[1])
         intersection_point, t, intersection_type = intersections[0]
         
-        # Handle absorption along path
+        # Store ray path segment
+        ray_paths.append({
+            'start': origin.copy(),
+            'end': intersection_point.copy(),
+            'region': current_region,
+            'intensity': intensity,
+            'bounce': bounce
+        })
+        
+        # Handle absorption along path (same as before)
         if current_region in ['top_absorber', 'bottom_absorber']:
             num_samples = max(10, int(t * 100))
             t_samples = np.linspace(0, t, num_samples)
@@ -367,9 +378,9 @@ def simulate_dual_layer_ray(ray, spline_top, spline_bottom, max_bounces=100):
             
             intensity *= np.exp(-alpha * t)
         
-        # Handle different intersection types
+        # Handle different intersection types (same as before)
         if intersection_type == 'top_interface':
-            # Handle top layer interface
+            # [Keep existing code for top_interface handling]
             x_int = intersection_point[0]
             normal = get_surface_normal(spline_top, x_int)
             
@@ -384,11 +395,9 @@ def simulate_dual_layer_ray(ray, spline_top, spline_bottom, max_bounces=100):
             R, T, theta_t = fresnel_coefficients(theta_i, n1, n2)
             
             if np.random.random() < R or theta_t is None:
-                # Reflection
                 reflected_direction = direction - 2 * np.dot(direction, normal) * normal
-                current_ray = [intersection_point + 1e-6 * reflected_direction, reflected_direction, intensity]
+                current_ray = [intersection_point + 1e-8 * reflected_direction, reflected_direction, intensity]
             else:
-                # Transmission
                 cos_theta_t = np.cos(theta_t)
                 normal_component = np.dot(direction, normal)
                 tangent = direction - normal_component * normal
@@ -400,7 +409,7 @@ def simulate_dual_layer_ray(ray, spline_top, spline_bottom, max_bounces=100):
                 current_ray = [intersection_point + 1e-6 * transmitted_direction, transmitted_direction, intensity * T]
         
         elif intersection_type == 'bottom_interface':
-            # Handle bottom layer interface (same logic as top)
+            # [Keep existing code for bottom_interface handling]
             x_int = intersection_point[0]
             normal = get_surface_normal(spline_bottom, x_int)
             
@@ -428,64 +437,49 @@ def simulate_dual_layer_ray(ray, spline_top, spline_bottom, max_bounces=100):
                 
                 current_ray = [intersection_point + 1e-6 * transmitted_direction, transmitted_direction, intensity * T]
         
-        # Replace the layer boundary handling section (lines 431-484):
         elif intersection_type == 'layer_interface':
-            # Ray crossing directly between adjacent layers (NO AIR GAP)
-            
-            # Determine which materials are in contact at the interface
+            # [Keep existing layer_interface code]
             x_int = intersection_point[0]
             
             if current_region in ['top_waveguide', 'top_absorber']:
-                # Ray going from top layer to bottom layer
-                # Determine what bottom region we're entering
                 if x_int <= rectangle_width:
-                    if spline_bottom(x_int) < rectangle_height:  # Bottom interface below layer boundary
-                        # Entering bottom absorber region
+                    if spline_bottom(x_int) < rectangle_height:
                         if current_region == 'top_waveguide':
-                            n1, n2 = n_wg, n_abs  # Top waveguide to bottom absorber
-                        else:  # top_absorber
-                            n1, n2 = n_abs, n_abs  # Top absorber to bottom absorber
+                            n1, n2 = n_wg, n_abs
+                        else:
+                            n1, n2 = n_abs, n_abs
                     else:
-                        # Entering bottom waveguide region
                         if current_region == 'top_waveguide':
-                            n1, n2 = n_wg, n_wg   # Top waveguide to bottom waveguide
-                        else:  # top_absorber
-                            n1, n2 = n_abs, n_wg  # Top absorber to bottom waveguide
+                            n1, n2 = n_wg, n_wg
+                        else:
+                            n1, n2 = n_abs, n_wg
                 else:
-                    n1, n2 = n_wg, n_abs  # Default
-                    
-            else:  # current_region in ['bottom_waveguide', 'bottom_absorber']
-                # Ray going from bottom layer to top layer
+                    n1, n2 = n_wg, n_abs
+            else:
                 if x_int <= rectangle_width:
-                    if spline_top(x_int) + rectangle_height > rectangle_height:  # Top interface above layer boundary
-                        # Entering top absorber region
+                    if spline_top(x_int) + rectangle_height > rectangle_height:
                         if current_region == 'bottom_waveguide':
-                            n1, n2 = n_wg, n_abs  # Bottom waveguide to top absorber
-                        else:  # bottom_absorber
-                            n1, n2 = n_abs, n_abs  # Bottom absorber to top absorber
+                            n1, n2 = n_wg, n_abs
+                        else:
+                            n1, n2 = n_abs, n_abs
                     else:
-                        # Entering top waveguide region
                         if current_region == 'bottom_waveguide':
-                            n1, n2 = n_wg, n_wg   # Bottom waveguide to top waveguide
-                        else:  # bottom_absorber
-                            n1, n2 = n_abs, n_wg  # Bottom absorber to top waveguide
+                            n1, n2 = n_wg, n_wg
+                        else:
+                            n1, n2 = n_abs, n_wg
                 else:
-                    n1, n2 = n_wg, n_abs  # Default
+                    n1, n2 = n_wg, n_abs
             
-            # Fresnel calculation for horizontal layer interface
             normal = np.array([0, 1]) if direction[1] > 0 else np.array([0, -1])
-            
             cos_theta_i = abs(np.dot(direction, normal))
             theta_i = np.arccos(cos_theta_i) if cos_theta_i <= 1 else 0
             
             R, T, theta_t = fresnel_coefficients(theta_i, n1, n2)
             
             if np.random.random() < R or theta_t is None:
-                # Reflection at layer interface
                 reflected_direction = direction - 2 * np.dot(direction, normal) * normal
                 current_ray = [intersection_point + 1e-6 * reflected_direction, reflected_direction, intensity]
             else:
-                # Transmission to adjacent layer
                 cos_theta_t = np.cos(theta_t)
                 normal_component = np.dot(direction, normal)
                 tangent = direction - normal_component * normal
@@ -497,13 +491,12 @@ def simulate_dual_layer_ray(ray, spline_top, spline_bottom, max_bounces=100):
                 current_ray = [intersection_point + 1e-6 * transmitted_direction, transmitted_direction, intensity * T]
         
         else:
-            # Ray hits boundary - exit simulation
             break
         
         if intensity < 1e-6:
             break
     
-    return absorbed_points
+    return absorbed_points, ray_paths
 
 # Main simulation
 print("Creating dual-layer system...")
@@ -511,14 +504,16 @@ spline_top, x_control, y_control = create_interface_curve()
 spline_bottom = spline_top  # Same interface shape for both layers
 
 absorbed_energy_map = []
+all_ray_paths = []
 
 print("Starting dual-layer ray simulation...")
-rays = generate_rays_collimated(num_rays)
+rays = generate_rays_lambertian(num_rays)
 for i, ray in enumerate(rays):
     if i % 100 == 0:
         print(f"Processing ray {i}/{num_rays}")
-    absorbed_points = simulate_dual_layer_ray(ray, spline_top, spline_bottom)
+    absorbed_points, ray_paths = simulate_dual_layer_ray_with_paths(ray, spline_top, spline_bottom)
     absorbed_energy_map.extend(absorbed_points)
+    all_ray_paths.extend(ray_paths)
 
 print(f"Simulation complete. Found {len(absorbed_energy_map)} absorption events.")
 
@@ -556,7 +551,7 @@ x_curve = np.linspace(0, rectangle_width, 200)
 y_curve_top = spline_top(x_curve)
 y_curve_bottom = spline_bottom(x_curve)
 
-# Top layer
+# Draw geometry
 plt.fill_between(x_curve, y_curve_top + rectangle_height + layer_gap, 
                 total_height, alpha=0.3, color='orange', label='Top Absorber')
 plt.fill_between(x_curve, rectangle_height + layer_gap, 
@@ -570,6 +565,38 @@ plt.fill_between([0, rectangle_width], rectangle_height, rectangle_height + laye
 plt.fill_between(x_curve, y_curve_bottom, rectangle_height, alpha=0.3, color='red', label='Bottom Absorber')
 plt.fill_between(x_curve, 0, y_curve_bottom, alpha=0.3, color='cyan', label='Bottom Waveguide')
 
+# Draw ray paths
+print(f"Drawing {len(all_ray_paths)} ray segments...")
+
+# Sample a subset of rays for visualization (to avoid overcrowding)
+max_rays_to_show = 100  # Adjust this number
+ray_subset = all_ray_paths
+
+for i, path in enumerate(ray_subset):
+    start = path['start']
+    end = path['end']
+    region = path['region']
+    intensity = path['intensity']
+    bounce = path['bounce']
+    
+    # Color-code by region and intensity
+    if region in ['top_waveguide', 'bottom_waveguide']:
+        color = 'blue'
+        alpha = min(0.8, intensity)
+        linewidth = 1.5
+    elif region in ['top_absorber', 'bottom_absorber']:
+        color = 'red'
+        alpha = min(0.6, intensity)
+        linewidth = 1.0
+    else:
+        color = 'gray'
+        alpha = 0.3
+        linewidth = 0.5
+    
+    # Draw ray segment
+    plt.plot([start[0], end[0]], [start[1], end[1]], 
+             color=color, alpha=alpha, linewidth=linewidth)
+
 # Interface curves
 plt.plot(x_curve, y_curve_top + rectangle_height + layer_gap, 'b-', linewidth=2, label='Top Interface')
 plt.plot(x_curve, y_curve_bottom, 'g-', linewidth=2, label='Bottom Interface')
@@ -578,11 +605,11 @@ plt.xlim(0, rectangle_width)
 plt.ylim(0, total_height)
 plt.xlabel('x [m]')
 plt.ylabel('y [m]')
-plt.title('Dual-Layer System Geometry')
-plt.legend()
-plt.grid(True)
+plt.title('Dual-Layer System with Ray Paths')
+plt.grid(True, alpha=0.3)
 
-# Replace the Plot 2 section (around line 250):
+
+
 # Replace the Plot 2 section (around line 250):
 plt.subplot(2, 2, 2)
 if len(x_absorbed) > 0:
