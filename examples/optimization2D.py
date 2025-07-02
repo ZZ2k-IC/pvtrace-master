@@ -1,14 +1,13 @@
-#%%
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import CubicSpline
 from scipy.optimize import fsolve
 
 # parameters
-n_wg = 1.4585             # waveguide refractive index
-n_abs = 1.6            # absorber refractive index (same as outside)
-alpha = 0.1            # absorption coefficient
-rectangle_width = 15.0
+n_wg = 2.32             # waveguide refractive index
+n_abs = 1.64            # absorber refractive index (same as outside)
+alpha = 6.4            # absorption coefficient
+rectangle_width = 15
 rectangle_height = 0.5
 num_rays = 100        # number of rays
 
@@ -109,7 +108,7 @@ def lambertian_sample_theta(n, theta_max=np.pi/3):
     theta = np.arcsin(np.sqrt(p) * np.sin(theta_max))
     return theta
 
-def generate_straight_rays(n, angle_deg=0):
+def generate_rays_collimated(n, angle_deg=0):
     """
     Generate parallel rays with a specific angle
     angle_deg: 0 = horizontal (rightward), 90 = vertical (upward)
@@ -128,7 +127,7 @@ def generate_straight_rays(n, angle_deg=0):
     return rays
 
 # emit rays from left boundary
-def generate_rays(n):
+def generate_rays_lambertian(n):
     thetas = lambertian_sample_theta(n)
     rays = []
     for theta in thetas:
@@ -386,7 +385,7 @@ spline, x_control, y_control = create_interface_curve()
 absorbed_energy_map = []
 
 print("Starting ray simulation...")
-rays = generate_rays(num_rays)
+rays = generate_rays_lambertian(num_rays)
 for i, ray in enumerate(rays):
     if i % 100 == 0:
         print(f"Processing ray {i}/{num_rays}")
@@ -408,6 +407,13 @@ else:
 
 # 2D absorption distribution visualization
 plt.figure(figsize=(12, 8))
+
+# Print statistics
+print(f"Total rays: {num_rays}")
+print(f"Absorption events: {len(absorbed_energy_map)}")
+if len(absorbed_energy_map) > 0:
+    print(f"Total absorbed energy: {np.sum(intensity_absorbed):.3f}")
+    print(f"Average absorption per event: {np.mean(intensity_absorbed):.3f}")
 
 # Plot 1: Interface curve and control points
 plt.subplot(2, 2, 1)
@@ -490,9 +496,4 @@ if len(y_absorbed) > 0:
 plt.tight_layout()
 plt.show()
 
-# Print statistics
-print(f"Total rays: {num_rays}")
-print(f"Absorption events: {len(absorbed_energy_map)}")
-if len(absorbed_energy_map) > 0:
-    print(f"Total absorbed energy: {np.sum(intensity_absorbed):.3f}")
-    print(f"Average absorption per event: {np.mean(intensity_absorbed):.3f}")
+

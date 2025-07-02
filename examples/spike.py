@@ -4,52 +4,36 @@ from scipy.interpolate import CubicSpline
 from scipy.optimize import fsolve
 
 # Parameters
-n_wg = 1.45         # waveguide refractive index
+n_wg = 1.45             # waveguide refractive index
 n_abs = 1.64               # absorber refractive index
-alpha = 6.4             # absorption coefficient
+alpha = 1             # absorption coefficient of paraterphenyl (mm-1)
 rectangle_width = 0.5 
 rectangle_height = 0.5
-layer_gap = 0.0          # Gap between top and bottom layers
-num_rays = 100            # number of rays
+layer_gap = 0.001          # Gap between top and bottom layers
+num_rays = 100           # number of rays
 
 # Total system height includes gap
 total_height = 2 * rectangle_height + layer_gap
 
+# Replace the create_interface_curve function:
 def create_interface_curve():
     # Create 20 control points for the interface
     x_control = np.linspace(0, rectangle_width, 20)
-    # Initialize with diagonal line, can be modified for optimization
+    # Initialize with diagonal line for TOP layer
     y_control = rectangle_height*1 - x_control * rectangle_height / rectangle_width
     # Ensure boundary conditions
     y_control[0] = rectangle_height*1
     y_control[-1] = 0
     
-    # Create cubic spline
-    spline = CubicSpline(x_control, y_control, bc_type='natural')
-    return spline, x_control, y_control
-"""
-def create_interface_curve():
-    # Create 20 control points for the interface
-    x_control = np.linspace(0, rectangle_width, 20)
+    # Create cubic spline for top layer
+    spline_top = CubicSpline(x_control, y_control, bc_type='natural')
     
-    # SIGMOID CURVE PARAMETERS
-    # Sigmoid: y = A / (1 + exp(-k*(x - x0))) + B
-    A = rectangle_height          # Amplitude (height difference)
-    k = 0.1                      # Steepness factor (higher = steeper transition)
-    x0 = rectangle_width * 0.5   # Inflection point (where curve is steepest)
-    B = 0                        # Vertical offset
+    # Create FLIPPED version for bottom layer (waveguides adjacent)
+    y_control_bottom = rectangle_height - y_control  # Flip vertically
+    spline_bottom = CubicSpline(x_control, y_control_bottom, bc_type='natural')
     
-    # Generate sigmoid curve - FLIPPED to start high and end low
-    y_control = A / (1 + np.exp(k * (x_control - x0))) + B
-    
-    # Ensure boundary conditions
-    y_control[0] = rectangle_height   # Start at top
-    y_control[-1] = 0                 # End at bottom
-    
-    # Create cubic spline
-    spline = CubicSpline(x_control, y_control, bc_type='natural')
-    return spline, x_control, y_control
-"""
+    return spline_top, spline_bottom, x_control, y_control
+
 """
 def create_interface_curve():
     # Create 20 control points for the interface
@@ -112,7 +96,7 @@ def generate_rays_lambertian(n):
     rays = []
     for theta in thetas:
         # Start rays in top layer
-        y_start = rectangle_height + np.random.uniform(0, rectangle_height)
+        y_start = rectangle_height + layer_gap + np.random.uniform(0, rectangle_height)
         origin = np.array([0.0, y_start])
         
         # RANDOMLY choose upward or downward direction
@@ -136,7 +120,7 @@ def generate_rays_lambertian_dual(n):
     thetas_top = lambertian_sample_theta(rays_per_layer)
     for theta in thetas_top:
         # Top layer: y > rectangle_height + layer_gap
-        y_start = rectangle_height + np.random.uniform(0, rectangle_height)
+        y_start = rectangle_height + layer_gap + np.random.uniform(0, rectangle_height)
         origin = np.array([0.0, y_start])
         
         # RANDOMLY choose upward or downward direction
@@ -215,23 +199,25 @@ def get_surface_normal(spline, x):
     normal = normal / np.linalg.norm(normal)
     return normal
 
-# Replace the determine_region function:
 def determine_region(point, spline_top, spline_bottom):
-    """Determine which region a point is in - NO AIR GAP"""
+    """Determine which region a point is in - with flipped bottom layer"""
     x, y = point
     
-    if y > rectangle_height:
-        # Top layer (starts at y = rectangle_height)
-        if y > spline_top(x) + rectangle_height:
+    if y > rectangle_height + layer_gap:
+        # Top layer (unchanged)
+        if y > spline_top(x) + rectangle_height + layer_gap:
             return 'top_absorber'
         else:
             return 'top_waveguide'
-    else:
-        # Bottom layer (0 <= y <= rectangle_height)
+    elif y < rectangle_height:
+        # Bottom layer (FLIPPED - now waveguide is on top of bottom layer)
         if y > spline_bottom(x):
-            return 'bottom_absorber'
+            return 'bottom_waveguide'  # Flipped: waveguide now on top
         else:
-            return 'bottom_waveguide'
+            return 'bottom_absorber'   # Flipped: absorber now on bottom
+    else:
+        # Gap region (air)
+        return 'gap'
 
 def intersect_interface(ray, spline, layer_offset):
     """Find intersection with interface curve (offset for top/bottom layer)"""
@@ -275,17 +261,17 @@ def intersect_interface(ray, spline, layer_offset):
     
     return None, None
 
-# Replace the intersect_layer_boundaries function:
 def intersect_layer_boundaries(ray):
-    """Find intersections with layer boundaries - NO GAP"""
+    """Find intersections with layer boundaries"""
     origin, direction, _ = ray
     intersections = []
     
-    # Layer boundaries (no gap)
+    # Layer boundaries
     boundaries = [
-        (0, 'bottom_boundary'),                    # y = 0 (bottom of system)
-        (rectangle_height, 'layer_interface'),     # y = 0.5 (interface between layers)
-        (total_height, 'top_boundary')             # y = 1.0 (top of system)
+        (0, 'bottom_waveguide'),                           # y = 0
+        (rectangle_height, 'bottom_top'),                   # y = 0.5
+        (rectangle_height + layer_gap, 'gap_top'),          # y = 0.55  
+        (total_height, 'top_boundary')                      # y = 1.05
     ]
     
     for y_boundary, boundary_type in boundaries:
@@ -428,73 +414,9 @@ def simulate_dual_layer_ray(ray, spline_top, spline_bottom, max_bounces=100):
                 
                 current_ray = [intersection_point + 1e-6 * transmitted_direction, transmitted_direction, intensity * T]
         
-        # Replace the layer boundary handling section (lines 431-484):
-        elif intersection_type == 'layer_interface':
-            # Ray crossing directly between adjacent layers (NO AIR GAP)
-            
-            # Determine which materials are in contact at the interface
-            x_int = intersection_point[0]
-            
-            if current_region in ['top_waveguide', 'top_absorber']:
-                # Ray going from top layer to bottom layer
-                # Determine what bottom region we're entering
-                if x_int <= rectangle_width:
-                    if spline_bottom(x_int) < rectangle_height:  # Bottom interface below layer boundary
-                        # Entering bottom absorber region
-                        if current_region == 'top_waveguide':
-                            n1, n2 = n_wg, n_abs  # Top waveguide to bottom absorber
-                        else:  # top_absorber
-                            n1, n2 = n_abs, n_abs  # Top absorber to bottom absorber
-                    else:
-                        # Entering bottom waveguide region
-                        if current_region == 'top_waveguide':
-                            n1, n2 = n_wg, n_wg   # Top waveguide to bottom waveguide
-                        else:  # top_absorber
-                            n1, n2 = n_abs, n_wg  # Top absorber to bottom waveguide
-                else:
-                    n1, n2 = n_wg, n_abs  # Default
-                    
-            else:  # current_region in ['bottom_waveguide', 'bottom_absorber']
-                # Ray going from bottom layer to top layer
-                if x_int <= rectangle_width:
-                    if spline_top(x_int) + rectangle_height > rectangle_height:  # Top interface above layer boundary
-                        # Entering top absorber region
-                        if current_region == 'bottom_waveguide':
-                            n1, n2 = n_wg, n_abs  # Bottom waveguide to top absorber
-                        else:  # bottom_absorber
-                            n1, n2 = n_abs, n_abs  # Bottom absorber to top absorber
-                    else:
-                        # Entering top waveguide region
-                        if current_region == 'bottom_waveguide':
-                            n1, n2 = n_wg, n_wg   # Bottom waveguide to top waveguide
-                        else:  # bottom_absorber
-                            n1, n2 = n_abs, n_wg  # Bottom absorber to top waveguide
-                else:
-                    n1, n2 = n_wg, n_abs  # Default
-            
-            # Fresnel calculation for horizontal layer interface
-            normal = np.array([0, 1]) if direction[1] > 0 else np.array([0, -1])
-            
-            cos_theta_i = abs(np.dot(direction, normal))
-            theta_i = np.arccos(cos_theta_i) if cos_theta_i <= 1 else 0
-            
-            R, T, theta_t = fresnel_coefficients(theta_i, n1, n2)
-            
-            if np.random.random() < R or theta_t is None:
-                # Reflection at layer interface
-                reflected_direction = direction - 2 * np.dot(direction, normal) * normal
-                current_ray = [intersection_point + 1e-6 * reflected_direction, reflected_direction, intensity]
-            else:
-                # Transmission to adjacent layer
-                cos_theta_t = np.cos(theta_t)
-                normal_component = np.dot(direction, normal)
-                tangent = direction - normal_component * normal
-                tangent = tangent / np.linalg.norm(tangent) if np.linalg.norm(tangent) > 0 else np.array([1, 0])
-                
-                transmitted_direction = (n1/n2) * tangent + np.sign(normal_component) * cos_theta_t * normal
-                transmitted_direction = transmitted_direction / np.linalg.norm(transmitted_direction)
-                
-                current_ray = [intersection_point + 1e-6 * transmitted_direction, transmitted_direction, intensity * T]
+        elif intersection_type in ['gap_top', 'bottom_top']:
+            # Ray crossing between layers through gap - just continue propagating
+            current_ray = [intersection_point + 1e-6 * direction, direction, intensity]
         
         else:
             # Ray hits boundary - exit simulation
@@ -506,14 +428,13 @@ def simulate_dual_layer_ray(ray, spline_top, spline_bottom, max_bounces=100):
     return absorbed_points
 
 # Main simulation
-print("Creating dual-layer system...")
-spline_top, x_control, y_control = create_interface_curve()
-spline_bottom = spline_top  # Same interface shape for both layers
+print("Creating dual-layer system with FLIPPED bottom layer...")
+spline_top, spline_bottom, x_control, y_control = create_interface_curve()
 
 absorbed_energy_map = []
 
 print("Starting dual-layer ray simulation...")
-rays = generate_rays_collimated(num_rays)
+rays = generate_rays_lambertian_dual(num_rays)  # Use dual ray generation
 for i, ray in enumerate(rays):
     if i % 100 == 0:
         print(f"Processing ray {i}/{num_rays}")
@@ -550,25 +471,24 @@ if len(absorbed_energy_map) > 0:
     print(f"Top layer absorption: {top_absorption:.3f} ({top_absorption/np.sum(intensity_absorbed)*100:.1f}%)")
     print(f"Bottom layer absorption: {bottom_absorption:.3f} ({bottom_absorption/np.sum(intensity_absorbed)*100:.1f}%)")
 
-# Plot 1: Dual-layer geometry
 plt.subplot(2, 2, 1)
 x_curve = np.linspace(0, rectangle_width, 200)
 y_curve_top = spline_top(x_curve)
 y_curve_bottom = spline_bottom(x_curve)
 
-# Top layer
+# Top layer (unchanged)
 plt.fill_between(x_curve, y_curve_top + rectangle_height + layer_gap, 
                 total_height, alpha=0.3, color='orange', label='Top Absorber')
 plt.fill_between(x_curve, rectangle_height + layer_gap, 
                 y_curve_top + rectangle_height + layer_gap, alpha=0.3, color='lightblue', label='Top Waveguide')
 
-# Gap
+# Gap (unchanged)
 plt.fill_between([0, rectangle_width], rectangle_height, rectangle_height + layer_gap, 
                 alpha=0.2, color='lightgray', label='Air Gap')
 
-# Bottom layer  
-plt.fill_between(x_curve, y_curve_bottom, rectangle_height, alpha=0.3, color='red', label='Bottom Absorber')
-plt.fill_between(x_curve, 0, y_curve_bottom, alpha=0.3, color='cyan', label='Bottom Waveguide')
+# Bottom layer (FLIPPED - waveguides now adjacent to gap)
+plt.fill_between(x_curve, y_curve_bottom, rectangle_height, alpha=0.3, color='cyan', label='Bottom Waveguide')
+plt.fill_between(x_curve, 0, y_curve_bottom, alpha=0.3, color='red', label='Bottom Absorber')
 
 # Interface curves
 plt.plot(x_curve, y_curve_top + rectangle_height + layer_gap, 'b-', linewidth=2, label='Top Interface')
@@ -578,7 +498,7 @@ plt.xlim(0, rectangle_width)
 plt.ylim(0, total_height)
 plt.xlabel('x [m]')
 plt.ylabel('y [m]')
-plt.title('Dual-Layer System Geometry')
+plt.title('Dual-Layer System (Flipped Bottom - Waveguides Adjacent)')
 plt.legend()
 plt.grid(True)
 
