@@ -50,7 +50,7 @@ class VacuumDetectorDelegate(SurfaceDelegate):
     def reflected_direction(self, surface, ray, geometry, container, adjacent):
         """ For detected rays, return zero direction to kill them.
         """
-        return (0.0, 0.0, 0.0)  # Kill the ray
+        return ray.direction  # Kill the ray
             
     def transmitted_direction(self, surface, ray, geometry, container, adjacent):
         """ Rays pass through unchanged for non-detected rays.

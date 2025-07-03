@@ -153,16 +153,29 @@ def follow(scene, ray, maxsteps=1000, maxpathlength=np.inf, emit_method='kT'):
             history.append([ray, (None,None,None),Event.KILL])
             break
 
-        # Check for zero direction vector - ray is "dead"
-        if ray.direction == (0.0, 0.0, 0.0):
-            history.append((ray, (None,None,None),Event.DETECT))
-            break
     
         info = next_hit(scene, ray)
         if info is None:
             break
 
         hit, (container, adjacent), point, full_distance = info
+
+        # Check if hit object is a detector
+        if hasattr(hit.geometry, '__class__') and hit.geometry.__class__.__name__ == 'PlanarDetector':
+            # Check if ray is approaching from detection direction
+            if hasattr(hit.geometry.material.surface, 'delegate') and hasattr(hit.geometry.material.surface.delegate, '_is_detection_direction'):
+                if hit.geometry.material.surface.delegate._is_detection_direction(ray.direction):
+                    # Ray hits detector - record detection and break
+                    ray = ray.propagate(full_distance)
+                    hit.geometry.material.surface.delegate.detected_count += 1
+                    hit.geometry.material.surface.delegate.detected_rays.append({
+                        'position': ray.position,
+                        'direction': ray.direction,
+                        'wavelength': ray.wavelength
+                    })
+                    history.append((ray, (None,None,None), Event.DETECT))
+                    break
+
         if hit is scene.root:
             history.append((ray.propagate(full_distance), (None,None,None),Event.EXIT))
             break

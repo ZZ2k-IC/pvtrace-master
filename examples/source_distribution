@@ -3,7 +3,7 @@ import numpy as np
 
 # Data from your table - rearranged in ascending angle order
 angles = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 64.5, 67, 71.5, 76, 80.5, 85, 90]
-power = np.array([145.5, 143.5, 141.8, 137.8, 135.1, 131.8, 130.8, 128.8, 128, 124.3, 111.5, 103.9, 91.1, 84.7, 77.1, 60.9, 59.1, 46, 38.5, 0])
+power = np.array([145.5, 144.5, 146.8, 140.8, 135.1, 131.8, 130.8, 128.8, 128, 124.3, 111.5, 103.9, 91.1, 84.7, 77.1, 60.9, 59.1, 46, 38.5, 10])-10
 
 index = 2.32
 angles_rad = np.radians(angles)  # Convert to radians
@@ -30,15 +30,15 @@ angle_smooth2 = np.linspace(0, max(angles2), 1000)
 # Convert to radians for cosine calculation
 angle_rad = np.radians(angle_smooth)
 angle_rad2 = np.radians(angle_smooth2)
-cosine_power = 180 * np.cos(angle_rad)
-cosine_power2 = 180 * (index**2) * np.cos(angle_rad2)
+cosine_power = 170 * np.cos(angle_rad)
+cosine_power2 = 170 * (index**2) * np.cos(angle_rad2)
 
 # Create the plot
 plt.figure(figsize=(12, 6))
 plt.plot(sorted_angles1, sorted_power1, 'bo-', linewidth=2, markersize=6, label='Original angles in air(θ₁)')
 #plt.plot(sorted_angles2, sorted_power2, 'go-', linewidth=2, markersize=6, label=f"Transformed angles in material(θ₂) with n = {index}")
 plt.plot(angle_smooth, cosine_power, 'r-', linewidth=2, label='Fitted lambertian')
-plt.plot(angle_smooth2, cosine_power2, 'm-', linewidth=2, label=f"Transformed lambertian in material(θ₂) with n = {index}")
+#plt.plot(angle_smooth2, cosine_power2, 'm-', linewidth=2, label=f"Transformed lambertian in material(θ₂) with n = {index}")
 plt.xlabel('Angle (degrees)')
 plt.ylabel('Power')
 plt.title('Source Distribution: Power vs Angle')
