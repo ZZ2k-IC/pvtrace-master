@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 
 # Set up the rays number
-rays_num = 10000
+rays_num = 40000
 
 # Add nodes to the scene graph
 world = Node(
@@ -17,41 +17,50 @@ world = Node(
         material=Material(refractive_index=1.0),
     )
 )
-"""
-box = Node(
-    name="Santovac 5",
-    geometry=Box(
-        (1, 1, 0.2),
-        material=Material(refractive_index=1.63),
-    ),
-    parent=world
-)
-"""
+
+# box = Node(
+#     name="Santovac 5",
+#     geometry=Box(
+#         (1, 1, 0.2),
+#         material=Material(refractive_index=1.63),
+#     ),
+#     parent=world
+# )
+
 
 horn = Node(
-    name = "Waveguide",
-    geometry = Mesh(
-        trimesh = trimesh.load(r"C:\Users\Zedd\Downloads\hornCY.stl"),
-        material = Material(
-            refractive_index = 1.45,
-        ),
-    ),
-    parent = world
+   name = "Waveguide",
+   geometry = Mesh(
+       trimesh = trimesh.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\STL_file\prism_horn.stl"),
+       material = Material(
+           refractive_index = 1.45,
+       ),
+   ),
+   parent = world
 )
-horn.translate((0, 0, 3.2))
+horn.translate((0, 0, 0.86))
 
-"""
-cylinder = Node(
-    name = "Waveguide",
-    geometry = 
-    Cylinder(
-        radius=0.25,
-        length=6.2,
-        material=Material(refractive_index=1.45)),
-        parent = world
-)
-cylinder.translate((0, 0, 3.0))  # Position cylinder at z=6.0
-"""
+
+# cylinder = Node(
+#     name = "Waveguide",
+#     geometry = 
+#     Cylinder(
+#         radius=0.25,
+#         length=6.2,
+#         material=Material(refractive_index=1.45)),
+#         parent = world
+# )
+# cylinder.translate((0, 0, 3.0))  # Position cylinder at z=6.0
+
+# Prism = Node(
+#     name="Glass Prism Waveguide",
+#     geometry=Box(
+#         (0.5, 0.5, 6.2),
+#         material=Material(refractive_index=1.45),
+#     ),
+#     parent=world
+# )
+# Prism.translate((0, 0, 3.0))
 
 # Add source of photons
 light = Node(
@@ -73,7 +82,7 @@ bottom_detector = create_planar_detector_node(
     detection_direction=(0, 0, 1),  # Detect rays coming from above (downward)
     parent=world
 )
-bottom_detector.translate((0, 0, 6.0))  # Position at cylinder bottom
+bottom_detector.translate((0, 0, 1.4))  # Position at cylinder bottom
 
 # Add detector at top of cylinder (z=3.2) - detects rays coming from below  
 top_detector = create_planar_detector_node(
@@ -148,7 +157,7 @@ if all_detected_rays:
     
     # Create histogram with 9 bins from 0 to 90 degrees
     plt.figure(figsize=(12, 8))
-    bins = np.linspace(0, 90, 19)  # 10 edges = 9 bins
+    bins = np.linspace(0, 90, 361)  # 10 edges = 9 bins
     
     # Plot detected rays histogram (solid bars)
     counts_detected, bin_edges, patches = plt.hist(detected_polar_angles, bins=bins, 
@@ -182,8 +191,18 @@ if all_detected_rays:
     plt.tight_layout()
     plt.show()
 
-
-
+    # Generate the two lists for analysis
+    # 1. Mid-values of each bin
+    bin_mid_values = (bin_edges[:-1] + bin_edges[1:]) / 2
+    
+    # 2. Relative heights (normalized so sum = 1)
+    # For detected rays
+    total_detected = np.sum(counts_detected)
+    detected_relative_heights = counts_detected / total_detected if total_detected > 0 else np.zeros_like(counts_detected)
+    
+    # For initial rays  
+    total_initial = np.sum(counts_initial)
+    initial_relative_heights = counts_initial / total_initial if total_initial > 0 else np.zeros_like(counts_initial)
 
     # Now create weighted histogram (1/sin(theta) weighting)
     # Calculate weights for detected rays
@@ -254,14 +273,6 @@ if all_detected_rays:
     print(f"  Min angle: {np.min(detected_polar_angles):.1f}°")
     print(f"  Max angle: {np.max(detected_polar_angles):.1f}°")
     
-    # Print histogram comparison
-    print(f"\nHistogram Comparison:")
-    print(f"{'Angle Range':<15} {'Initial':<10} {'Detected':<10} {'Efficiency':<12}")
-    print("-" * 50)
-    for i in range(len(counts_initial)):
-        efficiency = (counts_detected[i] / counts_initial[i] * 100) if counts_initial[i] > 0 else 0
-        print(f"{bin_edges[i]:.1f}°-{bin_edges[i+1]:.1f}°{'':<4} {int(counts_initial[i]):<10} {int(counts_detected[i]):<10} {efficiency:.1f}%")
-
 else:
     print("No rays were detected!")
 
