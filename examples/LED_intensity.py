@@ -2,9 +2,10 @@ from pvtrace import *
 import time
 import functools
 import numpy as np
+import trimesh
 
 # Set up the rays number
-rays_num = 10000
+rays_num = 100
 
 # Add nodes to the scene graph
 world = Node(
@@ -14,7 +15,7 @@ world = Node(
         material=Material(refractive_index=1.0),
     )
 )
-
+"""
 box = Node(
     name="Santovac 5",
     geometry=Box(
@@ -23,27 +24,39 @@ box = Node(
     ),
     parent=world
 )
+"""
 
-
-
-
-cylinder = Node(
-    name="Cylinder (fused quartz)",
-    geometry=Cylinder(
-        length=6,
-        radius=0.5,
-        material=Material(refractive_index=1.4585),
+horn = Node(
+    name = "Waveguide",
+    geometry = Mesh(
+        trimesh = trimesh.load(r"C:\Users\Zedd\Downloads\hornCY.stl"),
+        material = Material(
+            refractive_index = 1.45,
+        ),
     ),
-    parent=world
+    parent = world
 )
-cylinder.translate((0, 0, 3.1))
+horn.translate((0, 0, 3.2))
+
+"""
+cylinder = Node(
+    name = "Waveguide",
+    geometry = 
+    Cylinder(
+        radius=0.25,
+        length=6.2,
+        material=Material(refractive_index=1.45)),
+        parent = world
+)
+cylinder.translate((0, 0, 3.0))  # Position cylinder at z=6.0
+"""
 
 # Add source of photons
 light = Node(
     name="Light (555nm)",
     parent=world,
     light=Light(
-        position=functools.partial(rectangular_mask, 0.32, 0.26),
+        position=functools.partial(rectangular_mask, 0.16, 0.13),
         direction=functools.partial(lambertian, np.pi / 3) # Maximum beam angle is 60 degrees.
     )
 )
@@ -55,7 +68,7 @@ bottom_detector = create_planar_detector_node(
     length=1.0,  # Larger than cylinder radius (0.5) to catch all rays
     width=1.0,
     normal=(0, 0, 1),  # Normal pointing up
-    detection_direction=(0, 0, -1),  # Detect rays coming from above (downward)
+    detection_direction=(0, 0, 1),  # Detect rays coming from above (downward)
     parent=world
 )
 bottom_detector.translate((0, 0, 6.0))  # Position at cylinder bottom

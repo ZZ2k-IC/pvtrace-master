@@ -7,10 +7,10 @@ from scipy.optimize import fsolve
 n_wg = 1.83         # waveguide refractive index
 n_abs = 1.64               # absorber refractive index
 alpha = 1             # absorption coefficient
-rectangle_width = 0.5 
+rectangle_width = 15 
 rectangle_height = 0.5
 layer_gap = 0.0          # Gap between top and bottom layers
-num_rays = 50            # number of rays
+num_rays = 100            # number of rays
 
 # Total system height includes gap
 total_height = 2 * rectangle_height + layer_gap
@@ -101,7 +101,7 @@ def fresnel_coefficients(theta_i, n1, n2):
     
     return R, T, theta_t
 
-def lambertian_sample_theta(n, theta_max=np.pi/4.5):
+def lambertian_sample_theta(n, theta_max=np.pi*0.184):
     p = np.random.uniform(0, 1, n)
     theta = np.arcsin(np.sqrt(p) * np.sin(theta_max))
     return theta
@@ -507,7 +507,7 @@ absorbed_energy_map = []
 all_ray_paths = []
 
 print("Starting dual-layer ray simulation...")
-rays = generate_rays_lambertian(num_rays)
+rays = generate_rays_collimated(num_rays)
 for i, ray in enumerate(rays):
     if i % 100 == 0:
         print(f"Processing ray {i}/{num_rays}")
