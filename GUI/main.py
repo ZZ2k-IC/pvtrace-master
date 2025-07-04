@@ -511,12 +511,16 @@ class testingQT(QWidget):
             return LSC
         
 
-        def createMeshLSC(self, wavAbs, wavN):
+        def createMeshLSC(self, wavAbs, wavN, stl_file_path=None):
+            # Use provided path or default to primary STL file
+            if stl_file_path is None:
+                stl_file_path = self.STLfile
+            
             LSC = Node(
                 name = "LSC",
                 geometry = 
                 Mesh(
-                    trimesh = trimesh.load(self.STLfile),
+                    trimesh = trimesh.load(stl_file_path),  # Use the parameter
                     material = Material(
                         refractive_index = wavN,
                         components = [
@@ -527,7 +531,6 @@ class testingQT(QWidget):
                 ),
                 parent = world
             )
-            # print(LSC.geometry.trimesh.extents)
             LSC.location = [0,0,0]
             return LSC
             
@@ -1549,7 +1552,7 @@ class testingQT(QWidget):
             elif(LSC2shape == 'Sphere'):
                 LSC2 = createSphLSC(LSC2dimX, wavAbs2, wavN2)
             elif(LSC2shape == 'Import Mesh'):
-                LSC2 = createMeshLSC(self, wavAbs2, wavN2)
+                LSC2 = createMeshLSC(self, wavAbs2, wavN2, self.STLfile2)
             
             # Position the second LSC
             LSC2.location = [offsetX, offsetY, offsetZ]

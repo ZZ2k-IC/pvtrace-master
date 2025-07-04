@@ -5,6 +5,7 @@ import numpy as np
 import trimesh
 import matplotlib.pyplot as plt
 
+# unit is cm
 
 # Set up the rays number
 rays_num = 40000
@@ -31,14 +32,14 @@ world = Node(
 horn = Node(
    name = "Waveguide",
    geometry = Mesh(
-       trimesh = trimesh.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\STL_file\prism_horn.stl"),
+       trimesh = trimesh.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\STL_file\pyramid.stl"),
        material = Material(
-           refractive_index = 1.45,
+           refractive_index = 2.32,
        ),
    ),
    parent = world
 )
-horn.translate((0, 0, 0.86))
+horn.translate((0, 0, 0.54))
 
 
 # cylinder = Node(
@@ -67,8 +68,8 @@ light = Node(
     name="Light (555nm)",
     parent=world,
     light=Light(
-        position=functools.partial(rectangular_mask, 0.16, 0.13),
-        direction=functools.partial(lambertian, np.pi*43/180) # Maximum beam angle is ~43 degrees.
+        position=functools.partial(rectangular_mask, 0.16, 0.13), # Rectangular mask of size 0.32cm x 0.26cm
+        direction=functools.partial(lambertian, np.pi*25.5/180) # Maximum beam angle is ~43 degrees.
     )
 )
 
@@ -76,13 +77,13 @@ light = Node(
 # Add detector at bottom of cylinder (z=0.1) - detects rays coming from above
 bottom_detector = create_planar_detector_node(
     name="Bottom Detector",
-    length=1.0,  # Larger than cylinder radius (0.5) to catch all rays
-    width=1.0,
+    length=0.5,  # Larger than cylinder radius (0.5) to catch all rays
+    width=0.5,
     normal=(0, 0, 1),  # Normal pointing up
     detection_direction=(0, 0, 1),  # Detect rays coming from above (downward)
     parent=world
 )
-bottom_detector.translate((0, 0, 1.4))  # Position at cylinder bottom
+bottom_detector.translate((0, 0, 1.38))  # Position at cylinder bottom
 
 # Add detector at top of cylinder (z=3.2) - detects rays coming from below  
 top_detector = create_planar_detector_node(
@@ -132,6 +133,91 @@ print(f"Top detection efficiency: {top_efficiency:.1f}%")
 
 all_detected_rays = (bottom_detector.detector_delegate.detected_rays + 
                     top_detector.detector_delegate.detected_rays)
+
+# Calculate azimuthal angles for detected rays
+detected_azimuthal_angles = []
+for ray_info in all_detected_rays:
+    direction = ray_info['direction']
+    # Calculate azimuthal angle (φ) from x and y components
+    phi_rad = np.arctan2(direction[1], direction[0])
+    phi_deg = np.degrees(phi_rad)
+    # Convert to 0-360 range
+    if phi_deg < 0:
+        phi_deg += 360
+    detected_azimuthal_angles.append(phi_deg)
+
+# Calculate azimuthal angles for initial rays
+initial_azimuthal_angles = []
+for direction in initial_ray_directions:
+    phi_rad = np.arctan2(direction[1], direction[0])
+    phi_deg = np.degrees(phi_rad)
+    # Convert to 0-360 range
+    if phi_deg < 0:
+        phi_deg += 360
+    initial_azimuthal_angles.append(phi_deg)
+
+# Create histogram with bins from 0 to 360 degrees
+plt.figure(figsize=(12, 8))
+bins_az = np.linspace(0, 360, 361)  # 360 bins, 1 degree each
+
+# Plot detected rays histogram (solid bars)
+counts_detected_az, bin_edges_az, patches_az = plt.hist(detected_azimuthal_angles, bins=bins_az, 
+                                               edgecolor='black', alpha=0.7, 
+                                               label='Detected Rays', color='blue')
+
+# Plot initial rays histogram (dotted line)
+counts_initial_az, _, _ = plt.hist(initial_azimuthal_angles, bins=bins_az, 
+                                 histtype='step', linestyle='--', 
+                                 linewidth=2, label='Initial Rays', color='red')
+
+plt.xlabel('Azimuthal Angle (degrees)')
+plt.ylabel('Number of Rays')
+plt.title('Ray Num (Power) Distribution of Azimuthal Angles: Initial vs Detected Rays')
+plt.grid(True, alpha=0.3)
+plt.legend()
+
+# Add bin labels for detected rays
+bin_centers_az = (bin_edges_az[:-1] + bin_edges_az[1:]) / 2
+for i, (center, count) in enumerate(zip(bin_centers_az, counts_detected_az)):
+    if count > 0:
+        plt.text(center, count + 0.1, f'{int(count)}', ha='center', va='bottom', color='blue')
+
+# Add bin labels for initial rays (positioned above the step line)
+for i, (center, count) in enumerate(zip(bin_centers_az, counts_initial_az)):
+    if count > 0:
+        # Position labels just above the step line height
+        plt.text(center, count + 0.2, f'{int(count)}', ha='center', va='bottom', 
+                color='red', style='italic', fontweight='bold')
+
+plt.tight_layout()
+plt.show()
+
+# Generate the two lists for analysis
+# 1. Mid-values of each bin
+bin_mid_values_az = (bin_edges_az[:-1] + bin_edges_az[1:]) / 2
+
+# 2. Relative heights (normalized so sum = 1)
+# For detected rays
+total_detected_az = np.sum(counts_detected_az)
+detected_relative_heights_az = counts_detected_az / total_detected_az if total_detected_az > 0 else np.zeros_like(counts_detected_az)
+
+# For initial rays  
+total_initial_az = np.sum(counts_initial_az)
+initial_relative_heights_az = counts_initial_az / total_initial_az if total_initial_az > 0 else np.zeros_like(counts_initial_az)
+
+# Print azimuthal angle statistics
+print(f"\nAzimuthal Angle Statistics:")
+print(f"Initial rays: {len(initial_azimuthal_angles)} total")
+print(f"  Mean azimuthal angle: {np.mean(initial_azimuthal_angles):.1f}°")
+print(f"  Standard deviation: {np.std(initial_azimuthal_angles):.1f}°")
+print(f"  Min angle: {np.min(initial_azimuthal_angles):.1f}°")
+print(f"  Max angle: {np.max(initial_azimuthal_angles):.1f}°")
+
+print(f"Detected rays: {len(detected_azimuthal_angles)} total")
+print(f"  Mean azimuthal angle: {np.mean(detected_azimuthal_angles):.1f}°")
+print(f"  Standard deviation: {np.std(detected_azimuthal_angles):.1f}°")
+print(f"  Min angle: {np.min(detected_azimuthal_angles):.1f}°")
+print(f"  Max angle: {np.max(detected_azimuthal_angles):.1f}°")
 
 if all_detected_rays:
     # Calculate polar angles for detected rays
