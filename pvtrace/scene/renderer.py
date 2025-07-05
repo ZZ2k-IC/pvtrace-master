@@ -287,6 +287,8 @@ class MeshcatRenderer(object):
         world_segment: str = "short",
         short_length: float = 1.0,
         bauble_radius: float = 0.01,
+        mark_final_position: bool = False,
+        final_position_radius: float = 0.02,
     ):
         """ Similar to `add_ray_path` but with improved visualisation options.
     
@@ -303,13 +305,17 @@ class MeshcatRenderer(object):
                 The length of the final path segment when `world_segment='short'`.
             bauble_radius: float
                 The bauble radius when `baubles=True`.
+            mark_final_position: bool (optional)
+                Default is False. If True, adds a special bauble at the final ray position.
+            final_position_radius: float (optional)
+                The radius of the final position bauble when `mark_final_position=True`.
         """
         vis = self.vis
         if not world_segment in {"exclude", "short"}:
             raise ValueError(
                 "`world_segment` should be either `'exclude'` or `'short'`."
             )
-
+    
         if world_segment == "exclude":
             rays, events = zip(*history)
             try:
@@ -320,10 +326,40 @@ class MeshcatRenderer(object):
                     return
             except ValueError:
                 pass
-
+    
+        # Modified: Handle single-point history for final position marking
         if len(history) < 2:
-            raise AppError("Need at least two points to render a line.")
-
+            if mark_final_position and len(history) == 1:
+                # Only mark the final position without drawing lines
+                final_ray = history[0][0]
+                final_event = history[0][2]
+                
+                # Only mark if it's an absorption event
+                if final_event == Event.ABSORB:
+                    nanometers = final_ray.wavelength
+                    colour = wavelength_to_hex_int(nanometers)
+                    
+                    baubid = self.get_next_identifer()
+                    vis[f"absorption/{baubid}"].set_object(
+                        g.Sphere(final_position_radius),
+                        g.MeshBasicMaterial(
+                            color=colour, transparency=False, opacity=1
+                        ),
+                    )
+                    vis[f"absorption/{baubid}"].set_transform(
+                        tf.translation_matrix(final_ray.position)
+                    )
+                    return [baubid]
+                return []
+            else:
+                # Import AppError or define it locally
+                try:
+                    from pvtrace.common.errors import AppError
+                except ImportError:
+                    class AppError(Exception):
+                        pass
+                raise AppError("Need at least two points to render a line.")
+    
         ids = []
         rays, surfnorms, events = zip(*history)
         for (start_part, end_part) in zip(history[:-1], history[1:]):
@@ -339,7 +375,7 @@ class MeshcatRenderer(object):
                     )
             colour = wavelength_to_hex_int(nanometers)
             ids.append(self.add_line_segment(start, end, colour=colour))
-
+    
             if baubles:
                 event = start_part[2]
                 if event in {Event.TRANSMIT}:
@@ -351,8 +387,31 @@ class MeshcatRenderer(object):
                         ),
                     )
                     vis[f"exit/{baubid}"].set_transform(tf.translation_matrix(start))
-
+    
                     ids.append(baubid)
+        
+        # Add final position marker if requested
+        if mark_final_position:
+            final_ray = history[-1][0]
+            final_event = history[-1][2]
+            
+            # Mark final position for absorption events
+            if final_event == Event.ABSORB:
+                nanometers = final_ray.wavelength
+                colour = wavelength_to_hex_int(nanometers)
+                
+                baubid = self.get_next_identifer()
+                vis[f"absorption/{baubid}"].set_object(
+                    g.Sphere(final_position_radius),
+                    g.MeshBasicMaterial(
+                        color=colour, transparency=False, opacity=1
+                    ),
+                )
+                vis[f"absorption/{baubid}"].set_transform(
+                    tf.translation_matrix(final_ray.position)
+                )
+                ids.append(baubid)
+        
         return ids
 
     def remove_object(self, identifier):

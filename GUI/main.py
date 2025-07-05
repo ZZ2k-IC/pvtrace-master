@@ -724,14 +724,10 @@ class testingQT(QWidget):
                 else:
                     maxZ_LSC2 = LSC2dimZ
                 
-                # Position light above LSC2 with offsets
-                if maxZ_LSC2 < 1:
-                    light_z = offsetZ + maxZ_LSC2/2 + maxZ_LSC2*0.1  # 10% above LSC2 top
-                else:
-                    light_z = offsetZ + maxZ_LSC2/2 - 0.01 # 0.5 units above LSC2 top
+                light_z = maxZ_LSC2
                 
-                light.location = (offsetX, offsetY, light_z)
-                print(f"Light positioned above LSC2 at: ({offsetX}, {offsetY}, {light_z})")
+                light.location = (0, 0, light_z)
+                print(f"Light positioned above LSC2 at: (0, 0, {light_z})")
                 
             else:
                 # Original positioning above primary LSC
@@ -741,7 +737,6 @@ class testingQT(QWidget):
                     light.location = (0,0,maxZ/2+0.5)
                 print(f"Light positioned above LSC1 at: (0, 0, {light.location[2]})")
             
-            light.rotate(np.radians(180), (1, 0, 0))
             return wavelengths*1e9, intensity5800, light
         
         def addRectMask(light, lightDimX, lightDimY):
@@ -758,7 +753,30 @@ class testingQT(QWidget):
         def addLightDiv(light, lightDiv):
             light.light.direction = functools.partial(lambertian, np.radians(lightDiv))
             return light
+        
+        # Add this after loading your direction data (around line 758)
+        direction_data_list = np.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\pvtrace-master\detected_ray_directions_pyramid.npy")
+
+        def custom_direction_sampler():
+            """Sample a random direction from the loaded data"""
+            if len(direction_data_list) == 0:
+                # Fallback to default lambertian if no data
+                return lambertian(np.radians(lightDiv))
             
+            # Randomly select one direction from the loaded data
+            random_index = np.random.randint(0, len(direction_data_list))
+            direction = direction_data_list[random_index]
+            
+            # Normalize the direction vector (ensure it's unit length)
+            direction = direction / np.linalg.norm(direction)
+            
+            return tuple(direction)
+        
+        def addCustomDirection(light):
+            """Use custom direction sampler for the light source"""
+            light.light.direction = custom_direction_sampler
+            return light
+
         def doRayTracing(numRays, convThres, showSim):
             entrance_rays = []
             exit_rays = []
@@ -804,8 +822,13 @@ class testingQT(QWidget):
                     entrance_rays.append(path[0])
                     
                     if events[-1] == photon_tracer.Event.ABSORB:
-                        # vis.add_ray_path(path)
-                        vis.add_history(steps, **history_args)
+                        # Use the enhanced add_history method to mark only the final absorption position
+                        vis.add_history(
+                            steps, 
+                            baubles=False,  # Don't show intermediate baubles
+                            mark_final_position=True,  # Mark the final absorption point
+                            final_position_radius=LSCdimX*0.005  # Larger sphere for visibility
+                        )
                         
                         exit_norms.append(surfnorms[-1])
                         exit_rays.append(path[-1])
@@ -990,11 +1013,13 @@ class testingQT(QWidget):
             # Add absorbed ray positions and wavelengths
             xpos_abs = []
             ypos_abs = []
+            zpos_zbs = []
             absorbed_wavs = []
             for ray in absorbed_rays:
                 absorbed_wavs.append(ray.wavelength)
                 xpos_abs.append(ray.position[0])
                 ypos_abs.append(ray.position[1])
+                zpos_zbs.append(ray.position[2])
 
             # Calculate actual absorption (only ABSORB events)
             actual_absorbed_rays = len(absorbed_rays)
@@ -1096,7 +1121,64 @@ class testingQT(QWidget):
                 if(exit_wavs[k]!=entrance_wavs[k]):
                     emit_wavs.append(exit_wavs[k])
                     
+            plt.figure(7, clear=True)
+            if zpos_zbs:  # Check if there are absorbed rays
+                plt.hist(zpos_zbs, bins=50, range=(0, 17), alpha=0.7, color='blue', edgecolor='black')
+                plt.title(f'Absorbed rays distribution along Z-axis ({len(absorbed_rays)} rays)')
+                plt.xlabel('Z position (cm)')
+                plt.ylabel('Number of absorbed rays')
+                plt.grid(True, alpha=0.3)
+                plt.xlim(0, 17)
+                
+                # Add statistics text
+                z_mean = np.mean(zpos_zbs)
+                z_std = np.std(zpos_zbs)
+                plt.text(0.02, 0.98, 
+                        f'Mean Z: {z_mean:.2f} cm\nStd Z: {z_std:.2f} cm\nTotal: {len(zpos_zbs)} rays', 
+                        transform=plt.gca().transAxes, verticalalignment='top',
+                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            else:
+                plt.text(0.5, 0.5, 'No rays absorbed', transform=plt.gca().transAxes, 
+                        ha='center', va='center', fontsize=14)
+                plt.title('Absorbed rays distribution along Z-axis (No absorption)')
+                plt.xlabel('Z position (cm)')
+                plt.ylabel('Number of absorbed rays')
+                plt.xlim(0, 17)
+
+            if(self.saveFolder!=''):
+                plt.savefig(self.saveFolder+"/"+"absorption_z_histogram.png", dpi=figDPI)
+            plt.pause(0.00001)
+
+            # Histogram of absorbed rays along Y direction (-0.6 to 0.6)
+            plt.figure(8, clear=True)
+            if ypos_abs:  # Check if there are absorbed rays
+                plt.hist(ypos_abs, bins=50, range=(-0.6, 0.6), alpha=0.7, color='green', edgecolor='black')
+                plt.title(f'Absorbed rays distribution along Y-axis ({len(absorbed_rays)} rays)')
+                plt.xlabel('Y position (cm)')
+                plt.ylabel('Number of absorbed rays')
+                plt.grid(True, alpha=0.3)
+                plt.xlim(-0.6, 0.6)
+                
+                # Add statistics text
+                y_mean = np.mean(ypos_abs)
+                y_std = np.std(ypos_abs)
+                plt.text(0.02, 0.98, 
+                        f'Mean Y: {y_mean:.2f} cm\nStd Y: {y_std:.2f} cm\nTotal: {len(ypos_abs)} rays', 
+                        transform=plt.gca().transAxes, verticalalignment='top',
+                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            else:
+                plt.text(0.5, 0.5, 'No rays absorbed', transform=plt.gca().transAxes, 
+                        ha='center', va='center', fontsize=14)
+                plt.title('Absorbed rays distribution along Y-axis (No absorption)')
+                plt.xlabel('Y position (cm)')
+                plt.ylabel('Number of absorbed rays')
+                plt.xlim(-0.6, 0.6)
+
+            if(self.saveFolder!=''):
+                plt.savefig(self.saveFolder+"/"+"absorption_y_histogram.png", dpi=figDPI)
+            plt.pause(0.00001)
             
+
             # REPLACE THIS SECTION (lines 1133-1149):
             plt.figure(1, clear = True)
             norm = plt.Normalize(*(wavMin,wavMax))
@@ -1409,14 +1491,15 @@ class testingQT(QWidget):
                     history.append((ray.propagate(full_distance), (None,None,None), Event.EXIT))
                     break
 
-                # FIX: Correct adjacent detection for waveguide surfaces
-                if hit.name == "LSC2_Waveguide" and container.name == "LSC2_Waveguide":
-                    # Ray is inside waveguide hitting waveguide surface
-                    # Adjacent should always be World (air), not absorber
-                    corrected_adjacent = scene.root  # Now world exists in scope
-                else:
-                    # Use original adjacent for other cases
-                    corrected_adjacent = adjacent
+                corrected_adjacent = adjacent
+                # # FIX: Correct adjacent detection for waveguide surfaces in the air
+                # if hit.name == "LSC2_Waveguide" and container.name == "LSC2_Waveguide":
+                #     # Ray is inside waveguide hitting waveguide surface
+                #     # Adjacent should always be World (air), not absorber
+                #     corrected_adjacent = scene.root  # Now world exists in scope
+                # else:
+                #     # Use original adjacent for other cases
+                #     corrected_adjacent = adjacent
                 
                 material = container.geometry.material
                 absorbed, at_distance = material.is_absorbed(ray, full_distance)
@@ -1633,6 +1716,8 @@ class testingQT(QWidget):
             light = addPointSource(light)
         if(0<lightDiv<=90):
             light = addLightDiv(light, lightDiv)
+        if lightDiv == 0:
+            light = addCustomDirection(light)
             
         
         entrance_rays, exit_rays, exit_norms, absorbed_rays, numRays = doRayTracing(numRays, convThres, showSim)

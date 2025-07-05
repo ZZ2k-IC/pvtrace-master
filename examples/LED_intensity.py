@@ -77,24 +77,24 @@ light = Node(
 # Add detector at bottom of cylinder (z=0.1) - detects rays coming from above
 bottom_detector = create_planar_detector_node(
     name="Bottom Detector",
-    length=0.5,  # Larger than cylinder radius (0.5) to catch all rays
-    width=0.5,
+    length=0.3,  # Larger than cylinder radius (0.5) to catch all rays
+    width=0.3,
     normal=(0, 0, 1),  # Normal pointing up
     detection_direction=(0, 0, 1),  # Detect rays coming from above (downward)
     parent=world
 )
 bottom_detector.translate((0, 0, 1.38))  # Position at cylinder bottom
 
-# Add detector at top of cylinder (z=3.2) - detects rays coming from below  
-top_detector = create_planar_detector_node(
-    name="Top Detector",
-    length=2.0,  # Larger than cylinder radius to catch all rays
-    width=2.0,
-    normal=(0, 0, 1),  # Normal pointing up
-    detection_direction=(0, 0, 10.0),  # Detect rays coming from below (upward)
-    parent=world
-)
-top_detector.translate((0, 0, 6.2))  # Position at cylinder top
+# # Add detector at top of cylinder (z=3.2) - detects rays coming from below  
+# top_detector = create_planar_detector_node(
+#     name="Top Detector",
+#     length=2.0,  # Larger than cylinder radius to catch all rays
+#     width=2.0,
+#     normal=(0, 0, 1),  # Normal pointing up
+#     detection_direction=(0, 0, 10.0),  # Detect rays coming from below (upward)
+#     parent=world
+# )
+# top_detector.translate((0, 0, 6.2))  # Position at cylinder top
 
 # Use meshcat to render the scene (optional)
 viewer = MeshcatRenderer(open_browser=True, transparency=False, opacity=0.5, wireframe=True)
@@ -122,17 +122,30 @@ print(f"Took {time.time() - start_t}s.")
 # Print detection results
 print(f"\nDetection Results:")
 print(f"Bottom detector: {bottom_detector.detector_delegate.detected_count} rays detected")
-print(f"Top detector: {top_detector.detector_delegate.detected_count} rays detected")
-print(f"Total rays detected: {bottom_detector.detector_delegate.detected_count + top_detector.detector_delegate.detected_count}")
+# print(f"Top detector: {top_detector.detector_delegate.detected_count} rays detected")
+# print(f"Total rays detected: {bottom_detector.detector_delegate.detected_count + top_detector.detector_delegate.detected_count}")
 
 # Show detection efficiency
 bottom_efficiency = bottom_detector.detector_delegate.detected_count / rays_num * 100
-top_efficiency = top_detector.detector_delegate.detected_count / rays_num * 100
+# top_efficiency = top_detector.detector_delegate.detected_count / rays_num * 100
 print(f"Bottom detection efficiency: {bottom_efficiency:.1f}%")
-print(f"Top detection efficiency: {top_efficiency:.1f}%")
+# print(f"Top detection efficiency: {top_efficiency:.1f}%")
 
-all_detected_rays = (bottom_detector.detector_delegate.detected_rays + 
-                    top_detector.detector_delegate.detected_rays)
+
+# After the simulation is complete, extract all detected ray directions
+all_detected_rays = (bottom_detector.detector_delegate.detected_rays)
+
+# Extract 3D direction vectors
+detected_directions = []
+for ray_info in all_detected_rays:
+    direction = ray_info['direction']  # This is already a 3D vector [x, y, z]
+    detected_directions.append(direction)
+
+# Convert to numpy array for easier manipulation
+detected_directions = np.array(detected_directions)
+
+# Save to file
+np.save('detected_ray_directions_pyramid.npy', detected_directions)
 
 # Calculate azimuthal angles for detected rays
 detected_azimuthal_angles = []

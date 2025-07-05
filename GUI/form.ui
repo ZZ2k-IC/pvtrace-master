@@ -98,7 +98,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>2.5</string>
+      <string>10</string>
      </property>
      <property name="placeholderText">
       <string>x/y</string>
@@ -290,7 +290,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>0.19</string>
+      <string>40</string>
      </property>
      <property name="placeholderText">
       <string>z</string>
@@ -319,7 +319,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>2.5</string>
+      <string>6.4</string>
      </property>
      <property name="placeholderText">
       <string>x/y</string>
@@ -336,7 +336,7 @@
      </property>
      <item>
       <property name="text">
-       <string>Lumogen Red</string>
+       <string>None</string>
       </property>
      </item>
      <item>
@@ -346,7 +346,7 @@
      </item>
      <item>
       <property name="text">
-       <string>None</string>
+       <string>Lumogen Red</string>
       </property>
      </item>
     </widget>
@@ -581,7 +581,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>1.0</string>
+      <string>64.0</string>
      </property>
      <property name="placeholderText">
       <string>x/y</string>
@@ -597,7 +597,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>Waveguide background abs.</string>
+      <string>Background absorption</string>
      </property>
     </widget>
     <widget class="QLabel" name="label_55">
@@ -678,7 +678,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>Waveguide refractive index</string>
+      <string>Refractive index</string>
      </property>
     </widget>
     <widget class="QLineEdit" name="lineEdit_24">
@@ -691,7 +691,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>1.5</string>
+      <string>1.6</string>
      </property>
      <property name="placeholderText">
       <string>x/y</string>
@@ -795,7 +795,7 @@
     </rect>
     </property>
     <property name="text">
-    <string>Detector</string>
+    <string>Detector Position</string>
     </property>
     </widget>
 
@@ -817,20 +817,6 @@
     </property>
     </widget>
 
-    <!-- Detector Position Controls -->
-    <widget class="QLabel" name="label_detector_pos">
-    <property name="geometry">
-    <rect>
-    <x>150</x>
-    <y>195</y>
-    <width>31</width>
-    <height>21</height>
-    </rect>
-    </property>
-    <property name="text">
-    <string>Position:</string>
-    </property>
-    </widget>
 
     <widget class="QLabel" name="label_detector_X">
     <property name="geometry">
@@ -912,7 +898,7 @@
     </rect>
     </property>
     <property name="text">
-    <string>1.0</string>
+    <string>0</string>
     </property>
     </widget>
 
@@ -942,12 +928,12 @@
     </property>
     <item>
     <property name="text">
-    <string>Up (+Z)</string>
+    <string>Down (-Z)</string>
     </property>
     </item>
     <item>
     <property name="text">
-    <string>Down (-Z)</string>
+    <string>Up (+Z)</string>
     </property>
     </item>
     <item>
@@ -1057,7 +1043,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>2.0</string>
+      <string>1.0</string>
      </property>
      <property name="placeholderText">
       <string>x</string>
@@ -1088,7 +1074,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>2.0</string>
+      <string>1.0</string>
      </property>
      <property name="placeholderText">
       <string>y</string>
@@ -1119,7 +1105,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>5.0</string>
+      <string>0</string>
      </property>
      <property name="placeholderText">
       <string>z</string>
@@ -1234,7 +1220,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>Waveguide refractive index</string>
+      <string>Refractive index</string>
      </property>
     </widget>
     
@@ -1248,7 +1234,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>1.5</string>
+      <string>2.32</string>
      </property>
     </widget>
         
@@ -1262,7 +1248,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>Waveguide background abs.</string>
+      <string>Background absorption</string>
      </property>
     </widget>
     
@@ -1361,7 +1347,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>0</string>
+      <string>0.109</string>
      </property>
     </widget>
     
@@ -1389,7 +1375,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>2.6</string>
+      <string>5.4</string>
      </property>
     </widget>
     
@@ -1536,7 +1522,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>1.5</string>
+     <string>0.48</string>
     </property>
     <property name="placeholderText">
      <string>y</string>
@@ -1552,7 +1538,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>1.5</string>
+     <string>0.48</string>
     </property>
     <property name="placeholderText">
      <string>x</string>
