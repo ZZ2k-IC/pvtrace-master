@@ -755,7 +755,7 @@ class testingQT(QWidget):
             return light
         
         # Add this after loading your direction data (around line 758)
-        direction_data_list = np.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\pvtrace-master\detected_ray_directions_pyramid.npy")
+        direction_data_list = np.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\pvtrace-master\detected_ray_directions_LiNbO3_trapezium.npy")
 
         def custom_direction_sampler():
             """Sample a random direction from the loaded data"""

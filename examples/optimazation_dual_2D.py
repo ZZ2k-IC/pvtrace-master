@@ -5,13 +5,13 @@ from scipy.interpolate import CubicSpline
 from scipy.optimize import fsolve
 
 # Parameters
-n_wg = 2.32         # waveguide refractive index
+n_wg = 1.82       # waveguide refractive index
 n_abs = 1.64               # absorber refractive index
 alpha = 6.4             # absorption coefficient
 rectangle_width = 15 
 rectangle_height = 0.5
 layer_gap = 0.0          # Gap between top and bottom layers
-num_rays = 500            # number of rays
+num_rays = 100            # number of rays
 
 # Total system height includes gap
 total_height = 2 * rectangle_height + layer_gap
@@ -102,7 +102,7 @@ def fresnel_coefficients(theta_i, n1, n2):
     
     return R, T, theta_t
 
-def lambertian_sample_theta(n, theta_max=np.pi*43/180):
+def lambertian_sample_theta(n, theta_max=np.pi*33.33/180):
     p = np.random.uniform(0, 1, n)
     theta = np.arcsin(np.sqrt(p) * np.sin(theta_max))
     return theta
@@ -487,7 +487,7 @@ def intersect_layer_boundaries(ray):
     return intersections
 
 # Add this new function to track ray paths:
-def simulate_dual_layer_ray_with_paths(ray, spline_top, spline_bottom, max_bounces=100):
+def simulate_dual_layer_ray_with_paths(ray, spline_top, spline_bottom, ray_id, max_bounces=100):
     """Simulate ray in dual-layer system and return both absorption and ray paths"""
     absorbed_points = []
     ray_paths = []  # Store all ray segments
@@ -526,6 +526,7 @@ def simulate_dual_layer_ray_with_paths(ray, spline_top, spline_bottom, max_bounc
         
         # Store ray path segment
         ray_paths.append({
+            'ray_id': ray_id,  # Add this line
             'start': origin.copy(),
             'end': intersection_point.copy(),
             'region': current_region,
@@ -683,11 +684,11 @@ print("Starting dual-layer ray simulation...")
 
 start_t = time.time()
 
-rays = generate_rays_customized(num_rays)
+rays = generate_rays_lambertian(num_rays)
 for i, ray in enumerate(rays):
     if i % 100 == 0:
         print(f"Processing ray {i}/{num_rays}")
-    absorbed_points, ray_paths = simulate_dual_layer_ray_with_paths(ray, spline_top, spline_bottom)
+    absorbed_points, ray_paths = simulate_dual_layer_ray_with_paths(ray, spline_top, spline_bottom, ray_id=i)
     absorbed_energy_map.extend(absorbed_points)
     all_ray_paths.extend(ray_paths)
 
@@ -741,37 +742,53 @@ plt.fill_between([0, rectangle_width], rectangle_height, rectangle_height + laye
 plt.fill_between(x_curve, y_curve_bottom, rectangle_height, alpha=0.3, color='red', label='Bottom Absorber')
 plt.fill_between(x_curve, 0, y_curve_bottom, alpha=0.3, color='cyan', label='Bottom Waveguide')
 
-# Draw ray paths
-print(f"Drawing {len(all_ray_paths)} ray segments...")
+# Modified ray drawing section - group by ray_id and select complete paths
+print(f"Drawing complete ray paths...")
 
-# Sample a subset of rays for visualization (to avoid overcrowding)
-max_rays_to_show = 200  # Adjust this number
-ray_subset = all_ray_paths[::max(1, len(all_ray_paths)//max_rays_to_show)]
+# Group ray segments by ray_id
+ray_groups = {}
+for path in all_ray_paths:
+    ray_id = path['ray_id']
+    if ray_id not in ray_groups:
+        ray_groups[ray_id] = []
+    ray_groups[ray_id].append(path)
 
-for i, path in enumerate(ray_subset):
-    start = path['start']
-    end = path['end']
-    region = path['region']
-    intensity = path['intensity']
-    bounce = path['bounce']
+# Sort segments within each ray by bounce number
+for ray_id in ray_groups:
+    ray_groups[ray_id].sort(key=lambda x: x['bounce'])
+
+# Select a subset of complete rays to show
+max_rays_to_show = 30
+ray_ids = list(ray_groups.keys())
+selected_ray_ids = ray_ids[::max(1, len(ray_ids)//max_rays_to_show)]
+
+print(f"Drawing {len(selected_ray_ids)} complete ray paths...")
+
+# Draw complete ray paths
+for ray_id in selected_ray_ids:
+    ray_segments = ray_groups[ray_id]
     
-    # Color-code by region and intensity
-    if region in ['top_waveguide', 'bottom_waveguide']:
-        color = 'blue'
-        alpha = min(0.8, intensity)
-        linewidth = 1.5
-    elif region in ['top_absorber', 'bottom_absorber']:
-        color = 'red'
-        alpha = min(0.6, intensity)
-        linewidth = 1.0
-    else:
-        color = 'gray'
-        alpha = 0.3
-        linewidth = 0.5
+    # Choose a single color for the entire ray path
+    ray_color = plt.cm.tab10(ray_id % 10)  # Cycle through 10 colors
     
-    # Draw ray segment
-    plt.plot([start[0], end[0]], [start[1], end[1]], 
-             color=color, alpha=alpha, linewidth=linewidth)
+    for i, path in enumerate(ray_segments):
+        start = path['start']
+        end = path['end']
+        region = path['region']
+        intensity = path['intensity']
+        bounce = path['bounce']
+        
+        # Use consistent color for entire ray, but vary alpha/width by intensity
+        alpha = min(0.8, intensity * 2)  # Fade as intensity decreases
+        linewidth = max(0.5, intensity * 2)  # Thinner as intensity decreases
+        
+        # Draw ray segment
+        plt.plot([start[0], end[0]], [start[1], end[1]], 
+                 color=ray_color, alpha=alpha, linewidth=linewidth)
+        
+        # Optional: Add markers for bounces
+        if bounce == 0:  # Mark starting point
+            plt.plot(start[0], start[1], 'o', color=ray_color, markersize=4)
 
 # Interface curves
 plt.plot(x_curve, y_curve_top + rectangle_height + layer_gap, 'b-', linewidth=2, label='Top Interface')

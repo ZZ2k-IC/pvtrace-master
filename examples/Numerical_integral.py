@@ -44,3 +44,28 @@ print(f"Integral result: {fraction}")
 print(f"Integral result (square): {fraction_square}")
 print(f"Variance: {variance}")
 print(f"Standard deviation: {sigma}")
+#%%
+import numpy as np
+
+def magnetic_field_Bz(a, b, z, I):
+    """
+    计算矩形回路正上方 z 处的磁场 Bz
+    :param a: x 方向半边长 (米)
+    :param b: y 方向半边长 (米)
+    :param z: 高度 (米)
+    :param I: 电流强度 (安培)
+    :return: Bz (单位: 特斯拉)
+    """
+    mu_0 = 4 * np.pi * 1e-7  # 真空磁导率 (N/A^2)
+
+    sqrt_term = np.sqrt(a**2 + b**2 + z**2)
+    denom_a = a**2 + z**2
+    denom_b = b**2 + z**2
+
+    Bz = (mu_0 * I * a * b) / (np.pi * sqrt_term) * (1/denom_a + 1/denom_b)
+    return Bz
+
+B = magnetic_field_Bz(a=2e-3, b=1.6e-3, z=0.1, I=50)
+print(f"Bz = {B:.3e} T")
+
+# %%

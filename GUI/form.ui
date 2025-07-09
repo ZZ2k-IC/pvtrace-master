@@ -98,7 +98,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>10</string>
+      <string>6.4</string>
      </property>
      <property name="placeholderText">
       <string>x/y</string>
@@ -581,7 +581,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>64.0</string>
+      <string>6.4</string>
      </property>
      <property name="placeholderText">
       <string>x/y</string>
@@ -898,7 +898,7 @@
     </rect>
     </property>
     <property name="text">
-    <string>0</string>
+    <string>-0.1</string>
     </property>
     </widget>
 
@@ -1043,7 +1043,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>1.0</string>
+      <string>5.0</string>
      </property>
      <property name="placeholderText">
       <string>x</string>
@@ -1375,7 +1375,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>5.4</string>
+      <string>5.0</string>
      </property>
     </widget>
     
@@ -1522,7 +1522,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>0.48</string>
+     <string>0.46</string>
     </property>
     <property name="placeholderText">
      <string>y</string>
@@ -1538,7 +1538,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>0.48</string>
+     <string>3.96</string>
     </property>
     <property name="placeholderText">
      <string>x</string>
@@ -1803,7 +1803,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>1e-3</string>
+     <string>0</string>
     </property>
    </widget>
    <widget class="QLabel" name="label_56">

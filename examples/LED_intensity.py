@@ -32,14 +32,14 @@ world = Node(
 horn = Node(
    name = "Waveguide",
    geometry = Mesh(
-       trimesh = trimesh.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\STL_file\pyramid.stl"),
+       trimesh = trimesh.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\STL_file\4cm_half_trapezium.stl"),
        material = Material(
            refractive_index = 2.32,
        ),
    ),
    parent = world
 )
-horn.translate((0, 0, 0.54))
+horn.translate((0, 0, 1.75))
 
 
 # cylinder = Node(
@@ -77,13 +77,13 @@ light = Node(
 # Add detector at bottom of cylinder (z=0.1) - detects rays coming from above
 bottom_detector = create_planar_detector_node(
     name="Bottom Detector",
-    length=0.3,  # Larger than cylinder radius (0.5) to catch all rays
-    width=0.3,
+    length=0.6,  # Larger than cylinder radius (0.5) to catch all rays
+    width=0.6,
     normal=(0, 0, 1),  # Normal pointing up
     detection_direction=(0, 0, 1),  # Detect rays coming from above (downward)
     parent=world
 )
-bottom_detector.translate((0, 0, 1.38))  # Position at cylinder bottom
+bottom_detector.translate((0, 0, 3.95))  # Position at cylinder bottom
 
 # # Add detector at top of cylinder (z=3.2) - detects rays coming from below  
 # top_detector = create_planar_detector_node(
@@ -145,7 +145,7 @@ for ray_info in all_detected_rays:
 detected_directions = np.array(detected_directions)
 
 # Save to file
-np.save('detected_ray_directions_pyramid.npy', detected_directions)
+np.save('detected_ray_directions_LiNbO3_trapezium.npy', detected_directions)
 
 # Calculate azimuthal angles for detected rays
 detected_azimuthal_angles = []

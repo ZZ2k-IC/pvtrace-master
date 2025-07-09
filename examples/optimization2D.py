@@ -4,12 +4,12 @@ from scipy.interpolate import CubicSpline
 from scipy.optimize import fsolve
 
 # parameters
-n_wg = 2.32             # waveguide refractive index
+n_wg = 1.8             # waveguide refractive index
 n_abs = 1.64            # absorber refractive index (same as outside)
 alpha = 6.4            # absorption coefficient
 rectangle_width = 15
 rectangle_height = 0.5
-num_rays = 100        # number of rays
+num_rays = 500        # number of rays
 
 # define interface curve using cubic spline with 20 control points
 
@@ -103,7 +103,7 @@ def fresnel_coefficients(theta_i, n1, n2):
     return R, T, theta_t
 
 # Lambertian distribution
-def lambertian_sample_theta(n, theta_max=np.pi/3):
+def lambertian_sample_theta(n, theta_max=np.pi*33.75/180):
     p = np.random.uniform(0, 1, n)
     theta = np.arcsin(np.sqrt(p) * np.sin(theta_max))
     return theta
