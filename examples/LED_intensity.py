@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 # unit is cm
 
 # Set up the rays number
-rays_num = 40000
+rays_num = 10000
 
 # Add nodes to the scene graph
 world = Node(
@@ -22,24 +22,25 @@ world = Node(
 # box = Node(
 #     name="Santovac 5",
 #     geometry=Box(
-#         (1, 1, 0.2),
-#         material=Material(refractive_index=1.63),
+#         (0.5, 0.5, 3),
+#         material=Material(refractive_index=1.82),
 #     ),
 #     parent=world
 # )
+# box.translate((0, 0, -1.51))  # Position box at z=1.5
 
 
 horn = Node(
    name = "Waveguide",
    geometry = Mesh(
-       trimesh = trimesh.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\STL_file\4cm_half_trapezium.stl"),
+       trimesh = trimesh.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\STL_file\45deg_corner.stl"),
        material = Material(
-           refractive_index = 2.32,
+           refractive_index = 1.82,
        ),
    ),
    parent = world
 )
-horn.translate((0, 0, 1.75))
+horn.translate((0, -1.4177, 1.42))
 
 
 # cylinder = Node(
@@ -68,8 +69,8 @@ light = Node(
     name="Light (555nm)",
     parent=world,
     light=Light(
-        position=functools.partial(rectangular_mask, 0.16, 0.13), # Rectangular mask of size 0.32cm x 0.26cm
-        direction=functools.partial(lambertian, np.pi*25.5/180) # Maximum beam angle is ~43 degrees.
+        position=functools.partial(rectangular_mask, 0.24, 0.24), # Rectangular mask of size 0.32cm x 0.26cm
+        direction=functools.partial(lambertian, np.pi*33.33/180) # Maximum beam angle is ~43 degrees.
     )
 )
 
@@ -77,24 +78,24 @@ light = Node(
 # Add detector at bottom of cylinder (z=0.1) - detects rays coming from above
 bottom_detector = create_planar_detector_node(
     name="Bottom Detector",
-    length=0.6,  # Larger than cylinder radius (0.5) to catch all rays
-    width=0.6,
-    normal=(0, 0, 1),  # Normal pointing up
-    detection_direction=(0, 0, 1),  # Detect rays coming from above (downward)
+    length=0.7,  # Larger than cylinder radius (0.5) to catch all rays
+    width=0.7,
+    normal=(0, -1, 1.732),  # Normal pointing up
+    detection_direction=(0, -1, 1.732),  # Detect rays coming from above (downward)
     parent=world
 )
-bottom_detector.translate((0, 0, 3.95))  # Position at cylinder bottom
+bottom_detector.translate((0, -2, 3.46))  # Position at cylinder bottom
 
-# # Add detector at top of cylinder (z=3.2) - detects rays coming from below  
-# top_detector = create_planar_detector_node(
-#     name="Top Detector",
-#     length=2.0,  # Larger than cylinder radius to catch all rays
-#     width=2.0,
-#     normal=(0, 0, 1),  # Normal pointing up
-#     detection_direction=(0, 0, 10.0),  # Detect rays coming from below (upward)
-#     parent=world
-# )
-# top_detector.translate((0, 0, 6.2))  # Position at cylinder top
+# Add detector at top of cylinder (z=3.2) - detects rays coming from below  
+top_detector = create_planar_detector_node(
+    name="Top Detector",
+    length=0.6,  # Larger than cylinder radius to catch all rays
+    width=0.6,
+    normal=(0, 0, 1),  # Normal pointing up
+    detection_direction=(0, 0, -1),  # Detect rays coming from below (upward)
+    parent=world
+)
+top_detector.translate((0, 0, -0.02))  # Position at cylinder top
 
 # Use meshcat to render the scene (optional)
 viewer = MeshcatRenderer(open_browser=True, transparency=False, opacity=0.5, wireframe=True)

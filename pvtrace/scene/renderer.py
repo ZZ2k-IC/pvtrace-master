@@ -116,6 +116,26 @@ class MeshcatRenderer(object):
                 io.BytesIO(trimesh.exchange.stl.export_stl(box_geom))
             )
             
+            # Get the plane's normal vector and modify transform accordingly
+            if hasattr(geometry, 'normal'):
+                normal = geometry._normal
+                # Create rotation matrix to align Z-axis with normal
+                z_axis = np.array([0, 0, 1])
+                if not np.allclose(normal, z_axis):
+                    # Calculate rotation to align z_axis with normal
+                    v = np.cross(z_axis, normal)
+                    s = np.linalg.norm(v)
+                    c = np.dot(z_axis, normal)
+                    
+                    if s != 0:  # Not parallel or antiparallel
+                        vx = np.array([[0, -v[2], v[1]], [v[2], 0, -v[0]], [-v[1], v[0], 0]])
+                        rotation_matrix = np.eye(3) + vx + np.dot(vx, vx) * ((1 - c) / (s * s))
+                        
+                        # Apply rotation to transform
+                        transform_copy = np.copy(transform)
+                        transform_copy[:3, :3] = np.dot(transform_copy[:3, :3], rotation_matrix)
+                        transform = transform_copy
+            
             # Use the existing material but make it more visible for detectors
             detector_material = g.MeshBasicMaterial(
                 color=0x00ff00,  # Green for detectors

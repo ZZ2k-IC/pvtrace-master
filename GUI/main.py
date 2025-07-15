@@ -1177,6 +1177,34 @@ class testingQT(QWidget):
             if(self.saveFolder!=''):
                 plt.savefig(self.saveFolder+"/"+"absorption_y_histogram.png", dpi=figDPI)
             plt.pause(0.00001)
+
+            plt.figure(9, clear=True)
+            if xpos_abs:  # Check if there are absorbed rays
+                plt.hist(xpos_abs, bins=50, range=(-2.5, 2.5), alpha=0.7, color='red', edgecolor='black')
+                plt.title(f'Absorbed rays distribution along X-axis ({len(absorbed_rays)} rays)')
+                plt.xlabel('X position (cm)')
+                plt.ylabel('Number of absorbed rays')
+                plt.grid(True, alpha=0.3)
+                plt.xlim(-2.5, 2.5)
+                
+                # Add statistics text
+                x_mean = np.mean(xpos_abs)
+                x_std = np.std(xpos_abs)
+                plt.text(0.02, 0.98, 
+                        f'Mean X: {x_mean:.2f} cm\nStd X: {x_std:.2f} cm\nTotal: {len(xpos_abs)} rays', 
+                        transform=plt.gca().transAxes, verticalalignment='top',
+                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            else:
+                plt.text(0.5, 0.5, 'No rays absorbed', transform=plt.gca().transAxes, 
+                        ha='center', va='center', fontsize=14)
+                plt.title('Absorbed rays distribution along X-axis (No absorption)')
+                plt.xlabel('X position (cm)')
+                plt.ylabel('Number of absorbed rays')
+                plt.xlim(-2.5, 2.5)
+
+            if(self.saveFolder!=''):
+                plt.savefig(self.saveFolder+"/"+"absorption_x_histogram.png", dpi=figDPI)
+            plt.pause(0.00001)
             
 
             # REPLACE THIS SECTION (lines 1133-1149):
