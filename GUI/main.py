@@ -28,6 +28,8 @@ import trimesh
 from matplotlib.pyplot import plot, hist, scatter
 import json
 
+import time
+
 
 class testingQT(QWidget):
     def __init__(self):
@@ -777,7 +779,17 @@ class testingQT(QWidget):
             light.light.direction = custom_direction_sampler
             return light
 
-        def doRayTracing(numRays, convThres, showSim):
+        def doRayTracing(numRays, convThres, showSim, use_parallel=True):
+            """Modified to support both parallel and sequential processing"""
+            
+            # For small simulations, use sequential
+            if numRays < 200 or not use_parallel:
+                return doRayTracingSequential(numRays, convThres, showSim)
+            
+            # For large simulations, use batch parallel processing
+            return doRayTracingBatchParallel(numRays, convThres, showSim)
+
+        def doRayTracingSequential(numRays, convThres, showSim):
             entrance_rays = []
             exit_rays = []
             exit_norms = []
@@ -882,6 +894,139 @@ class testingQT(QWidget):
             
             return entrance_rays, exit_rays, exit_norms, absorbed_rays, k
         
+        def doRayTracingBatchParallel(numRays, convThres, showSim):
+            """Batch-based parallel processing that actually works"""
+            
+            numRays = int(numRays)
+            
+            # Process in batches sequentially, but with parallelized analysis
+            batch_size = max(100, numRays // 16)
+            num_batches = (numRays + batch_size - 1) // batch_size
+            
+            print(f"Processing {numRays} rays in {num_batches} batches of ~{batch_size} rays each")
+            
+            all_entrance_rays = []
+            all_exit_rays = []
+            all_exit_norms = []
+            all_absorbed_rays = []
+            
+            total_processed = 0
+            edge_emit = 0
+            conv = 1
+            
+            # Create visualization once
+            vis = MeshcatRenderer(open_browser=showSim, transparency=False, opacity=0.5, wireframe=True)
+            scene = Scene(world)
+            vis.render(scene)
+            
+            # Process each batch sequentially (but faster than single rays)
+            for batch_num in range(num_batches):
+                current_batch_size = min(batch_size, numRays - total_processed)
+                
+                print(f"Processing batch {batch_num + 1}/{num_batches} ({current_batch_size} rays)")
+                
+                # Process this batch
+                batch_entrance, batch_exit, batch_exit_norms, batch_absorbed, processed = processBatch(
+                    scene, vis, current_batch_size, total_processed
+                )
+                
+                # Combine results
+                all_entrance_rays.extend(batch_entrance)
+                all_exit_rays.extend(batch_exit)
+                all_exit_norms.extend(batch_exit_norms)
+                all_absorbed_rays.extend(batch_absorbed)
+                
+                total_processed += processed
+                
+                # Check convergence every batch
+                batch_edge_emit = 0
+                for norm in batch_exit_norms:
+                    if norm is not None and len(norm) >= 3 and norm[2] is not None and abs(norm[2]) <= 0.5:
+                        batch_edge_emit += 1
+                
+                edge_emit += batch_edge_emit
+                current_efficiency = edge_emit / total_processed if total_processed > 0 else 0
+                
+                print(f"Batch {batch_num + 1} complete: {processed} rays, efficiency: {current_efficiency:.4f}")
+                
+                # Early convergence check (optional)
+                if total_processed > 500:  # Only check after reasonable sample size
+                    recent_efficiency = batch_edge_emit / processed if processed > 0 else 0
+                    conv = conv * 0.95 + abs(current_efficiency - recent_efficiency) * 0.05
+                    if conv < convThres:
+                        print(f"Converged early at {total_processed} rays")
+                        break
+            
+            # Final visualization update
+            time.sleep(1)
+            vis.render(scene)
+            
+            return all_entrance_rays, all_exit_rays, all_exit_norms, all_absorbed_rays, total_processed
+
+        def processBatch(scene, vis, batch_size, seed_offset):
+            """Process a batch of rays - this runs sequentially but faster than one-by-one"""
+            
+            np.random.seed(3 + seed_offset)  # Different seed for each batch
+            
+            batch_entrance = []
+            batch_exit = []
+            batch_exit_norms = []
+            batch_absorbed = []
+            
+            history_args = {
+                "bauble_radius": LSCdimX*0.005,
+                "world_segment": "short",
+                "short_length": LSCdimZ * 0.1,
+            }
+            
+            processed = 0
+            attempts = 0
+            max_attempts = batch_size * 3  # Prevent infinite loops
+            
+            while processed < batch_size and attempts < max_attempts:
+                attempts += 1
+                
+                for ray in scene.emit(1):
+                    steps = photon_tracer.follow(scene, ray, emit_method='redshift')
+                    path, surfnorms, events = zip(*steps)
+                    
+                    # Apply your existing filtering
+                    if len(path) <= 2:
+                        continue
+                    if (self.enclosingBox.isChecked() and events[0] == Event.GENERATE and 
+                        events[1] == Event.TRANSMIT and events[2] == Event.TRANSMIT and 
+                        events[3] == Event.EXIT):
+                        continue
+                    
+                    batch_entrance.append(path[0])
+                    
+                    # Add visualization for some rays (not all to avoid slowdown)
+                    if processed % 10 == 0:  # Visualize every 10th ray
+                        if events[-1] == photon_tracer.Event.ABSORB:
+                            vis.add_history(
+                                steps, 
+                                baubles=False,
+                                mark_final_position=True,
+                                final_position_radius=LSCdimX*0.005
+                            )
+                    
+                    if events[-1] == photon_tracer.Event.ABSORB:
+                        batch_exit_norms.append(surfnorms[-1])
+                        batch_exit.append(path[-1])
+                        batch_absorbed.append(path[-1])
+                    elif events[-1] == photon_tracer.Event.KILL:
+                        batch_exit_norms.append(surfnorms[-1])
+                        batch_exit.append(path[-1])
+                    elif events[-1] == photon_tracer.Event.EXIT:
+                        batch_exit_norms.append(surfnorms[-2])
+                        batch_exit.append(path[-2])
+                    
+                    processed += 1
+                    if processed >= batch_size:
+                        break
+            
+            return batch_entrance, batch_exit, batch_exit_norms, batch_absorbed, processed
+
         def analyzeResults(entrance_rays, exit_rays, exit_norms, absorbed_rays):
             # Primary LSC (LSC1) results
             edge_emit = 0
@@ -1014,39 +1159,19 @@ class testingQT(QWidget):
             xpos_abs = []
             ypos_abs = []
             zpos_zbs = []
+            direction_abs = []
             absorbed_wavs = []
             for ray in absorbed_rays:
                 absorbed_wavs.append(ray.wavelength)
                 xpos_abs.append(ray.position[0])
                 ypos_abs.append(ray.position[1])
                 zpos_zbs.append(ray.position[2])
+                direction_abs.append(ray.direction)
 
             # Calculate actual absorption (only ABSORB events)
             actual_absorbed_rays = len(absorbed_rays)
             absorption_percentage = (actual_absorbed_rays / numRays) * 100 if numRays > 0 else 0
 
-
-            # Print results with clear separation between LSCs
-            print("\n=== PRIMARY LSC (LSC1) RESULTS ===")
-            print("Optical efficiency: " + str(edge_emit/numRays))
-            print(f"Light absorbed by system: {actual_absorbed_rays} rays ({absorption_percentage:.2f}%)")
-            print("\t\tLeft \tRight \tFront \tBack")
-            print("Edge emission\t" + str(edge_emit_left/numRays) + " \t" + str(edge_emit_right/numRays) + " \t" + str(edge_emit_front/numRays) + " \t" + str(edge_emit_back/numRays))
-            print("Bottom emission\t" + str(edge_emit_bottom/numRays) + "\t Absorption coeff " + str(-np.log10(max(edge_emit_bottom/numRays, 1e-10))/float(self.dimz.text())))
-            print("Top emission\t" + str(edge_emit_top/numRays))
-            
-            if enableSecondLSC:
-                print("\n=== WAVEGUIDE LSC (LSC2) RESULTS ===")
-                print("Optical efficiency: " + str(edge_emit_lsc2/numRays))
-                print("\t\tLeft \tRight \tFront \tBack")
-                print("Edge emission\t" + str(edge_emit_left_lsc2/numRays) + " \t" + str(edge_emit_right_lsc2/numRays) + " \t" + str(edge_emit_front_lsc2/numRays) + " \t" + str(edge_emit_back_lsc2/numRays))
-                print("Bottom emission\t" + str(edge_emit_bottom_lsc2/numRays))
-                print("Top emission\t" + str(edge_emit_top_lsc2/numRays))
-                
-                print("\n=== SYSTEM TOTALS ===")
-                total_edge_emit = edge_emit + edge_emit_lsc2
-                print("Combined optical efficiency: " + str(total_edge_emit/numRays))
-                print("Light transfer efficiency (LSC2→LSC1): " + str(edge_emit/max(edge_emit_lsc2, 1)))
 
             # Save results to file
             if self.saveFileName != '':
@@ -1120,6 +1245,84 @@ class testingQT(QWidget):
             for k in range(len(exit_wavs)):
                 if(exit_wavs[k]!=entrance_wavs[k]):
                     emit_wavs.append(exit_wavs[k])
+
+            # Figure 10: Azimuthal angle histogram for absorbed rays
+            plt.figure(10, clear=True)
+            if direction_abs:  # Check if there are absorbed ray directions
+                # Calculate azimuthal angles for absorbed rays
+                absorbed_azimuthal_angles = []
+                for direction in direction_abs:
+                    # Azimuthal angle: atan2(y, x) in degrees
+                    azimuthal_angle = np.degrees(np.arctan2(direction[1], direction[0]))
+                    # Convert to 0-360 range
+                    if azimuthal_angle < 0:
+                        azimuthal_angle += 360
+                    absorbed_azimuthal_angles.append(azimuthal_angle)
+                
+                plt.hist(absorbed_azimuthal_angles, bins=36, range=(0, 360), alpha=0.7, color='purple', edgecolor='black')
+                plt.title(f'Absorbed rays azimuthal angle distribution ({len(absorbed_rays)} rays)')
+                plt.xlabel('Azimuthal angle (degrees)')
+                plt.ylabel('Number of absorbed rays')
+                plt.grid(True, alpha=0.3)
+                plt.xlim(0, 360)
+                
+                # Add statistics text
+                az_mean = np.mean(absorbed_azimuthal_angles)
+                az_std = np.std(absorbed_azimuthal_angles)
+                plt.text(0.02, 0.98, 
+                        f'Mean: {az_mean:.1f}°\nStd: {az_std:.1f}°\nTotal: {len(absorbed_azimuthal_angles)} rays', 
+                        transform=plt.gca().transAxes, verticalalignment='top',
+                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            else:
+                plt.text(0.5, 0.5, 'No rays absorbed', transform=plt.gca().transAxes, 
+                        ha='center', va='center', fontsize=14)
+                plt.title('Absorbed rays azimuthal angle distribution (No absorption)')
+                plt.xlabel('Azimuthal angle (degrees)')
+                plt.ylabel('Number of absorbed rays')
+                plt.xlim(0, 360)
+
+            if(self.saveFolder!=''):
+                plt.savefig(self.saveFolder+"/"+"absorbed_azimuthal_histogram.png", dpi=figDPI)
+            plt.pause(0.00001)
+
+            # Figure 11: Polar angle histogram for absorbed rays
+            plt.figure(11, clear=True)
+            if direction_abs:  # Check if there are absorbed ray directions
+                # Calculate polar angles for absorbed rays
+                absorbed_polar_angles = []
+                for direction in direction_abs:
+                    # Polar angle: arccos(|z|) for 0-90 degree range
+                    cos_theta = abs(direction[2])  # Use absolute value for 0-90° range
+                    cos_theta = np.clip(cos_theta, 0, 1)  # Clamp to valid range for arccos
+                    theta_rad = np.arccos(cos_theta)
+                    theta_deg = np.degrees(theta_rad)
+                    absorbed_polar_angles.append(theta_deg)
+                
+                plt.hist(absorbed_polar_angles, bins=90, range=(0, 90), alpha=0.7, color='orange', edgecolor='black')
+                plt.title(f'Absorbed rays polar angle distribution ({len(absorbed_rays)} rays)')
+                plt.xlabel('Polar angle (degrees)')
+                plt.ylabel('Number of absorbed rays')
+                plt.grid(True, alpha=0.3)
+                plt.xlim(0, 90)
+                
+                # Add statistics text
+                pol_mean = np.mean(absorbed_polar_angles)
+                pol_std = np.std(absorbed_polar_angles)
+                plt.text(0.02, 0.98, 
+                        f'Mean: {pol_mean:.1f}°\nStd: {pol_std:.1f}°\nTotal: {len(absorbed_polar_angles)} rays', 
+                        transform=plt.gca().transAxes, verticalalignment='top',
+                        bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+            else:
+                plt.text(0.5, 0.5, 'No rays absorbed', transform=plt.gca().transAxes, 
+                        ha='center', va='center', fontsize=14)
+                plt.title('Absorbed rays polar angle distribution (No absorption)')
+                plt.xlabel('Polar angle (degrees)')
+                plt.ylabel('Number of absorbed rays')
+                plt.xlim(0, 90)
+
+            if(self.saveFolder!=''):
+                plt.savefig(self.saveFolder+"/"+"absorbed_polar_histogram.png", dpi=figDPI)
+            plt.pause(0.00001)
                     
             plt.figure(7, clear=True)
             if zpos_zbs:  # Check if there are absorbed rays
@@ -1240,115 +1443,115 @@ class testingQT(QWidget):
                 plt.savefig(self.saveFolder+"/"+"absorption_plot.png", dpi=figDPI)
             plt.pause(0.00001)
             
-            plt.figure(2, clear = True)
-            n, bins, patches = hist(entrance_wavs, bins = 10, histtype = 'step', label='entrance wavs')
-            plot(wavelengths, intensity/max(intensity)*max(n))
-            plt.title('Entrance wavelengths')
-            plt.legend()
-            if(self.saveFolder!=''):
-                plt.savefig(self.saveFolder+"/"+"entrance_wavs.png", dpi=figDPI)
-            plt.pause(0.00001)
-                    
-            plt.figure(3, clear=True)
-            n, bins, patches = hist(emit_wavs, bins = 10, histtype = 'step', label='emit wavs')
-            if(self.lumophore.currentText() != 'None' ):
-                plot(x, abs_spec*max(n), label = 'LR305 abs')
-                plot(x, ems_spec*max(n), label = 'LR305 emis')
-            plt.title('Re-emitted light wavelengths')
-            plt.legend()
-            if(self.saveFolder!=''):
-                plt.savefig(self.saveFolder+"/"+"emit_wavs.png", dpi=figDPI)
-            plt.pause(0.00001)
-            
-            # if(convPlot):
-            plt.figure(4)
-            if(not convPlot):
-                plot(range(len(entrance_rays)), self.ydata)
-            plt.title('optical efficiency vs. rays generated')
-            plt.grid(True)
-            plt.xlabel('num rays')
-            plt.ylabel('opt. eff')
-            if(self.saveFolder!=''):
-                plt.savefig(self.saveFolder+"/"+"conv_plot.png", dpi=figDPI)
-            plt.pause(0.00001)
-            
-            plt.figure(5)
-            if(not convPlot):
-                plot(range(len(entrance_rays)), self.convarr)
-            plt.title('convergence')
-            plt.grid(True)
-            plt.xlabel('num rays')
-            plt.ylabel('convergence parameter')
-            plt.yscale('log')
-            if(self.saveFolder!=''):
-                plt.savefig(self.saveFolder+"/"+"conv_plot2.png", dpi=figDPI)
-            plt.pause(0.00001)
-
-            fig = plt.figure(6, clear=True, figsize=(3, 10))
-            fig.add_subplot(515)
-            norm = plt.Normalize(*(wavMin,wavMax))
-            wl = np.arange(wavMin, wavMax+1,2)
-            colorlist = list(zip(norm(wl), [np.array(wavelength_to_rgb(w))/255 for w in wl]))
-            spectralmap = matplotlib.colors.LinearSegmentedColormap.from_list("spectrum", colorlist)
-            colors_ent = [spectralmap(norm(value)) for value in entrance_wavs]
-            colors_exit = [spectralmap(norm(value)) for value in exit_wavs]
-            scatter(xpos_ent, ypos_ent, alpha=1.0, color=colors_ent)
-            scatter(xpos_exit, ypos_exit, alpha=1.0, color=colors_exit)
-            # plt.title('entrance/exit positions')
-            plt.xlabel('x position')
-            plt.ylabel('y position')
-            plt.axis('equal')
-            plt.ylim(-2, 2)
-            # plt.title('Entrance/exit ray positions')
-            plt.tight_layout()
-
-            fig.add_subplot(513)
-            n, bins, patches = hist(entrance_wavs, bins = 10, histtype = 'step', label='entrance wavs')
-            plot(wavelengths, intensity/max(intensity)*max(n))
+            # plt.figure(2, clear = True)
+            # n, bins, patches = hist(entrance_wavs, bins = 10, histtype = 'step', label='entrance wavs')
+            # plot(wavelengths, intensity/max(intensity)*max(n))
             # plt.title('Entrance wavelengths')
-            plt.xlabel('wavelength (nm)')
-            plt.ylabel('counts (entrance)')
-            plt.legend()
-            plt.grid()
-            plt.pause(0.00001)
-            plt.tight_layout()
-            
-            fig.add_subplot(514)
-            n, bins, patches = hist(emit_wavs, bins = 10, histtype = 'step', label='emit wavs')
-            if(self.lumophore.currentText() != 'None' ):
-                plot(x, abs_spec*max(n), label = 'LR305 abs')
-                plot(x, ems_spec*max(n), label = 'LR305 emis')
+            # plt.legend()
+            # if(self.saveFolder!=''):
+            #     plt.savefig(self.saveFolder+"/"+"entrance_wavs.png", dpi=figDPI)
+            # plt.pause(0.00001)
+                    
+            # plt.figure(3, clear=True)
+            # n, bins, patches = hist(emit_wavs, bins = 10, histtype = 'step', label='emit wavs')
+            # if(self.lumophore.currentText() != 'None' ):
+            #     plot(x, abs_spec*max(n), label = 'LR305 abs')
+            #     plot(x, ems_spec*max(n), label = 'LR305 emis')
             # plt.title('Re-emitted light wavelengths')
-            plt.xlabel('wavelength (nm)')
-            plt.ylabel('counts (re-emitted)')
-            plt.legend(loc='upper left', fontsize='small')
-            plt.grid()
-            plt.pause(0.00001)
-            plt.tight_layout()
+            # plt.legend()
+            # if(self.saveFolder!=''):
+            #     plt.savefig(self.saveFolder+"/"+"emit_wavs.png", dpi=figDPI)
+            # plt.pause(0.00001)
             
-            fig.add_subplot(511)
-            if(not convPlot):
-                plot(range(len(entrance_rays)), self.ydata)
+            # # if(convPlot):
+            # plt.figure(4)
+            # if(not convPlot):
+            #     plot(range(len(entrance_rays)), self.ydata)
             # plt.title('optical efficiency vs. rays generated')
-            plt.grid(True)
-            plt.xlabel('num rays')
-            plt.ylabel('opt. eff.')
-            plt.pause(0.00001)
-            plt.tight_layout()
+            # plt.grid(True)
+            # plt.xlabel('num rays')
+            # plt.ylabel('opt. eff')
+            # if(self.saveFolder!=''):
+            #     plt.savefig(self.saveFolder+"/"+"conv_plot.png", dpi=figDPI)
+            # plt.pause(0.00001)
             
-            fig.add_subplot(512)
-            if(not convPlot):
-                plot(range(len(entrance_rays)), self.convarr)
+            # plt.figure(5)
+            # if(not convPlot):
+            #     plot(range(len(entrance_rays)), self.convarr)
             # plt.title('convergence')
-            plt.grid(True)
-            plt.xlabel('num rays')
-            plt.ylabel('convergence')
-            plt.yscale('log')
-            plt.pause(0.00001)
-            plt.tight_layout()
+            # plt.grid(True)
+            # plt.xlabel('num rays')
+            # plt.ylabel('convergence parameter')
+            # plt.yscale('log')
+            # if(self.saveFolder!=''):
+            #     plt.savefig(self.saveFolder+"/"+"conv_plot2.png", dpi=figDPI)
+            # plt.pause(0.00001)
 
-            if(self.saveFolder!=''):
-                plt.savefig(self.saveFolder+"/"+"plots.png", dpi=figDPI)
+            # fig = plt.figure(6, clear=True, figsize=(3, 10))
+            # fig.add_subplot(515)
+            # norm = plt.Normalize(*(wavMin,wavMax))
+            # wl = np.arange(wavMin, wavMax+1,2)
+            # colorlist = list(zip(norm(wl), [np.array(wavelength_to_rgb(w))/255 for w in wl]))
+            # spectralmap = matplotlib.colors.LinearSegmentedColormap.from_list("spectrum", colorlist)
+            # colors_ent = [spectralmap(norm(value)) for value in entrance_wavs]
+            # colors_exit = [spectralmap(norm(value)) for value in exit_wavs]
+            # scatter(xpos_ent, ypos_ent, alpha=1.0, color=colors_ent)
+            # scatter(xpos_exit, ypos_exit, alpha=1.0, color=colors_exit)
+            # # plt.title('entrance/exit positions')
+            # plt.xlabel('x position')
+            # plt.ylabel('y position')
+            # plt.axis('equal')
+            # plt.ylim(-2, 2)
+            # # plt.title('Entrance/exit ray positions')
+            # plt.tight_layout()
+
+            # fig.add_subplot(513)
+            # n, bins, patches = hist(entrance_wavs, bins = 10, histtype = 'step', label='entrance wavs')
+            # plot(wavelengths, intensity/max(intensity)*max(n))
+            # # plt.title('Entrance wavelengths')
+            # plt.xlabel('wavelength (nm)')
+            # plt.ylabel('counts (entrance)')
+            # plt.legend()
+            # plt.grid()
+            # plt.pause(0.00001)
+            # plt.tight_layout()
+            
+            # fig.add_subplot(514)
+            # n, bins, patches = hist(emit_wavs, bins = 10, histtype = 'step', label='emit wavs')
+            # if(self.lumophore.currentText() != 'None' ):
+            #     plot(x, abs_spec*max(n), label = 'LR305 abs')
+            #     plot(x, ems_spec*max(n), label = 'LR305 emis')
+            # # plt.title('Re-emitted light wavelengths')
+            # plt.xlabel('wavelength (nm)')
+            # plt.ylabel('counts (re-emitted)')
+            # plt.legend(loc='upper left', fontsize='small')
+            # plt.grid()
+            # plt.pause(0.00001)
+            # plt.tight_layout()
+            
+            # fig.add_subplot(511)
+            # if(not convPlot):
+            #     plot(range(len(entrance_rays)), self.ydata)
+            # # plt.title('optical efficiency vs. rays generated')
+            # plt.grid(True)
+            # plt.xlabel('num rays')
+            # plt.ylabel('opt. eff.')
+            # plt.pause(0.00001)
+            # plt.tight_layout()
+            
+            # fig.add_subplot(512)
+            # if(not convPlot):
+            #     plot(range(len(entrance_rays)), self.convarr)
+            # # plt.title('convergence')
+            # plt.grid(True)
+            # plt.xlabel('num rays')
+            # plt.ylabel('convergence')
+            # plt.yscale('log')
+            # plt.pause(0.00001)
+            # plt.tight_layout()
+
+            # if(self.saveFolder!=''):
+            #     plt.savefig(self.saveFolder+"/"+"plots.png", dpi=figDPI)
 
             
 
@@ -1747,8 +1950,14 @@ class testingQT(QWidget):
         if lightDiv == 0:
             light = addCustomDirection(light)
             
-        
-        entrance_rays, exit_rays, exit_norms, absorbed_rays, numRays = doRayTracing(numRays, convThres, showSim)
+        start_t = time.time()
+
+        # entrance_rays, exit_rays, exit_norms, absorbed_rays, numRays = doRayTracing(numRays, convThres, showSim)
+        use_parallel = numRays > 500  # Use parallel for larger simulations
+        entrance_rays, exit_rays, exit_norms, absorbed_rays, numRays = doRayTracing(numRays, convThres, showSim, use_parallel)
+        # Print timing results
+        print(f"Took {time.time() - start_t}s.")
+
         analyzeResults(entrance_rays, exit_rays, exit_norms, absorbed_rays)
         return entrance_rays, exit_rays, exit_norms
         

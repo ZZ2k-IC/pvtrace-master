@@ -1234,7 +1234,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>1.82</string>
+      <string>1.81</string>
      </property>
     </widget>
         
@@ -1347,7 +1347,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>0.109</string>
+      <string>0.17</string>
      </property>
     </widget>
     
@@ -1522,7 +1522,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>0.46</string>
+     <string>0.96</string>
     </property>
     <property name="placeholderText">
      <string>y</string>

@@ -1,7 +1,7 @@
 import trimesh
 import numpy as np
 
-mesh = trimesh.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\STL_file\45deg_corner.stl")
+mesh = trimesh.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\STL_file\4_wedges.stl")
 
 print("Centroid:", mesh.centroid)
 
