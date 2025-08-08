@@ -601,8 +601,6 @@ class testingQT(QWidget):
         
         def addSolarCells(LSC, left, right, front, back, allEdges):
             
-            
-            
             class SolarCellEdges(FresnelSurfaceDelegate):
                 def reflectivity(self, surface, ray, geometry, container, adjacent):
                     normal = geometry.normal(ray.position)
@@ -752,6 +750,13 @@ class testingQT(QWidget):
         def addPointSource(light):
             return light
         
+        def addStraightRays(light):
+            def straight_direction():
+                return (0, 0, 1)  # Straight down in -Z direction
+            
+            light.light.direction = straight_direction
+            return light
+                
         def addLightDiv(light, lightDiv):
             light.light.direction = functools.partial(lambertian, np.radians(lightDiv))
             return light
@@ -1408,40 +1413,112 @@ class testingQT(QWidget):
             if(self.saveFolder!=''):
                 plt.savefig(self.saveFolder+"/"+"absorption_x_histogram.png", dpi=figDPI)
             plt.pause(0.00001)
+
+            # REPLACE THIS SECTION (lines 1418-1512):
+            plt.figure(1, clear=True)
             
-
-            # REPLACE THIS SECTION (lines 1133-1149):
-            plt.figure(1, clear = True)
-            norm = plt.Normalize(*(wavMin,wavMax))
-            wl = np.arange(wavMin, wavMax+1,2)
-            colorlist = list(zip(norm(wl), [np.array(wavelength_to_rgb(w))/255 for w in wl]))
-            spectralmap = matplotlib.colors.LinearSegmentedColormap.from_list("spectrum", colorlist)
-
-            # Plot absorbed rays instead of entrance/exit
+            # Plot absorbed rays as contour plot on YZ plane
             if absorbed_wavs:  # Only plot if there are absorbed rays
-                colors_abs = [spectralmap(norm(value)) for value in absorbed_wavs]
-                scatter(xpos_abs, ypos_abs, alpha=1.0, color=colors_abs, s=20)
-                plt.title(f'Light absorption positions ({len(absorbed_rays)} rays absorbed)')
-                plt.xlabel('x position')
-                plt.ylabel('y position')
-                plt.axis('equal')
+                # Extract Y and Z positions for absorbed rays
+                ypos_abs_array = np.array(ypos_abs)
+                zpos_abs_array = np.array(zpos_zbs)
                 
-                # Add absorption statistics text box
+                # Create 2D histogram with FULL range (no cropping to effective data range)
+                counts, y_edges, z_edges = np.histogram2d(
+                    ypos_abs_array, zpos_abs_array, 
+                    bins=50  # Fixed resolution
+                )
+                
+                # Calculate effective absorbed area (36.8% threshold)
+                max_count = np.max(counts)
+                threshold = max_count * 0.368  # 36.8% of maximum (1/e criterion)
+                
+                # Find bins that exceed the threshold
+                effective_mask = counts >= threshold
+                effective_bins = np.sum(effective_mask)
+                
+                # Calculate bin area
+                y_bin_width = (y_edges[1] - y_edges[0])
+                z_bin_width = (z_edges[1] - z_edges[0])
+                bin_area = y_bin_width * z_bin_width  # cm²
+                
+                # Calculate effective absorbed area
+                effective_absorbed_area = effective_bins * bin_area
+                
+                # Calculate total area covered by any absorption
+                total_mask = counts > 0
+                total_bins = np.sum(total_mask)
+                total_absorbed_area = total_bins * bin_area
+                
+                # Calculate area efficiency (effective/total)
+                area_efficiency = (effective_absorbed_area / total_absorbed_area * 100) if total_absorbed_area > 0 else 0
+                
+                # PRINT RESULTS
+                print(f"\n=== ABSORPTION AREA ANALYSIS ===")
+                print(f"Maximum absorption density: {max_count} rays/bin")
+                print(f"36.8% threshold: {threshold:.1f} rays/bin")
+                print(f"Effective absorbed area: {effective_absorbed_area:.3f} cm²")
+                print(f"Total absorbed area: {total_absorbed_area:.3f} cm²")
+                print(f"Area efficiency: {area_efficiency:.1f}%")
+                print(f"Bin size: {y_bin_width:.4f} × {z_bin_width:.4f} cm")
+                print(f"Grid resolution: {len(y_edges)-1} × {len(z_edges)-1} bins")
+                
+                # Create meshgrid for contour plot
+                Y, Z = np.meshgrid(y_edges[:-1], z_edges[:-1])
+                
+                # Create contour plot
+                contour = plt.contourf(Y, Z, counts.T, levels=20, cmap='viridis')
+                plt.colorbar(contour, label='Number of absorbed rays')
+                
+                # Add contour lines for better visualization
+                contour_lines = plt.contour(Y, Z, counts.T, levels=10, colors='white', alpha=0.6, linewidths=0.5)
+                plt.clabel(contour_lines, inline=True, fontsize=8, fmt='%d')
+                
+                # Add special contour line for 36.8% threshold
+                if threshold > 0:
+                    threshold_contour = plt.contour(Y, Z, counts.T, levels=[threshold], colors='red', linewidths=2)
+                    plt.clabel(threshold_contour, inline=True, fontsize=10, fmt='36.8%%', colors='red')
+                
+                plt.title(f'Light absorption density on YZ plane ({len(absorbed_rays)} rays absorbed)')
+                plt.xlabel('Y position (cm)')
+                plt.ylabel('Z position (cm)')
+                
+                # Enhanced statistics text box with area analysis
                 absorption_percentage = (len(absorbed_rays) / numRays) * 100
                 plt.text(0.02, 0.98, 
-                        f'Total rays: {numRays}\nAbsorbed: {len(absorbed_rays)}\nAbsorption: {absorption_percentage:.1f}%', 
+                        f'Total rays: {numRays}\nAbsorbed: {len(absorbed_rays)}\nAbsorption: {absorption_percentage:.1f}%\n'
+                        f'Effective area: {effective_absorbed_area:.3f} cm²\nTotal area: {total_absorbed_area:.3f} cm²\n'
+                        f'Area efficiency: {area_efficiency:.1f}%', 
                         transform=plt.gca().transAxes, verticalalignment='top',
                         bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
+                
+                # Save area analysis to file if dataFile exists
+                if dataFile:
+                    dataFile.write(f"\n=== ABSORPTION AREA ANALYSIS ===\n")
+                    dataFile.write(f"Maximum absorption density\t{max_count} rays/bin\n")
+                    dataFile.write(f"36.8% threshold\t{threshold:.1f} rays/bin\n")
+                    dataFile.write(f"Effective absorbed area\t{effective_absorbed_area:.3f} cm²\n")
+                    dataFile.write(f"Total absorbed area\t{total_absorbed_area:.3f} cm²\n")
+                    dataFile.write(f"Area efficiency\t{area_efficiency:.1f}%\n")
+                    dataFile.write(f"Bin size\t{y_bin_width:.4f} × {z_bin_width:.4f} cm\n")
+                    dataFile.write(f"Grid resolution\t{len(y_edges)-1} × {len(z_edges)-1} bins\n")
+                    
             else:
                 plt.text(0.5, 0.5, 'No rays absorbed', transform=plt.gca().transAxes, 
                         ha='center', va='center', fontsize=14)
-                plt.title('Light absorption positions (No absorption detected)')
-                plt.xlabel('x position')
-                plt.ylabel('y position')
-
+                plt.title('Light absorption density on YZ plane (No absorption detected)')
+                plt.xlabel('Y position (cm)')
+                plt.ylabel('Z position (cm)')
+                
+                print("\n=== ABSORPTION AREA ANALYSIS ===")
+                print("No absorption detected - cannot calculate effective area")
+            
             if(self.saveFolder!=''):
-                plt.savefig(self.saveFolder+"/"+"absorption_plot.png", dpi=figDPI)
+                plt.savefig(self.saveFolder+"/"+"absorption_contour_yz.png", dpi=figDPI, bbox_inches='tight')
             plt.pause(0.00001)
+            
+
+
             
             # plt.figure(2, clear = True)
             # n, bins, patches = hist(entrance_wavs, bins = 10, histtype = 'step', label='entrance wavs')
@@ -1948,7 +2025,7 @@ class testingQT(QWidget):
         if(0<lightDiv<=90):
             light = addLightDiv(light, lightDiv)
         if lightDiv == 0:
-            light = addCustomDirection(light)
+            light = addStraightRays(light)  # Straight rays for lightDiv = 0
             
         start_t = time.time()
 

@@ -19,28 +19,28 @@ world = Node(
     )
 )
 
-# box = Node(
-#     name="Santovac 5",
-#     geometry=Box(
-#         (0.5, 0.5, 3),
-#         material=Material(refractive_index=1.82),
-#     ),
-#     parent=world
-# )
-# box.translate((0, 0, -1.51))  # Position box at z=1.5
-
-
-horn = Node(
-   name = "Waveguide",
-   geometry = Mesh(
-       trimesh = trimesh.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\STL_file\45deg_corner.stl"),
-       material = Material(
-           refractive_index = 1.82,
-       ),
-   ),
-   parent = world
+box = Node(
+    name="Santovac 5",
+    geometry=Box(
+        (0.5, 0.5, 3),
+        material=Material(refractive_index=1.45),
+    ),
+    parent=world
 )
-horn.translate((0, -1.4177, 1.42))
+box.translate((0, 0, 1.501))  # Position box at z=1.5
+
+
+# horn = Node(
+#    name = "Waveguide",
+#    geometry = Mesh(
+#        trimesh = trimesh.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\STL_file\45deg_corner.stl"),
+#        material = Material(
+#            refractive_index = 1.82,
+#        ),
+#    ),
+#    parent = world
+# )
+# horn.translate((0, -1.4177, 1.42))
 
 
 # cylinder = Node(
@@ -70,7 +70,7 @@ light = Node(
     parent=world,
     light=Light(
         position=functools.partial(rectangular_mask, 0.24, 0.24), # Rectangular mask of size 0.32cm x 0.26cm
-        direction=functools.partial(lambertian, np.pi*33.33/180) # Maximum beam angle is ~43 degrees.
+        direction=functools.partial(lambertian, np.pi*90/180) # Maximum beam angle is ~43 degrees.
     )
 )
 
@@ -92,10 +92,10 @@ top_detector = create_planar_detector_node(
     length=0.6,  # Larger than cylinder radius to catch all rays
     width=0.6,
     normal=(0, 0, 1),  # Normal pointing up
-    detection_direction=(0, 0, -1),  # Detect rays coming from below (upward)
+    detection_direction=(0, 0, 1), 
     parent=world
 )
-top_detector.translate((0, 0, -0.02))  # Position at cylinder top
+top_detector.translate((0, 0, 3))  # Position at cylinder top
 
 # Use meshcat to render the scene (optional)
 viewer = MeshcatRenderer(open_browser=True, transparency=False, opacity=0.5, wireframe=True)
@@ -123,14 +123,14 @@ print(f"Took {time.time() - start_t}s.")
 # Print detection results
 print(f"\nDetection Results:")
 print(f"Bottom detector: {bottom_detector.detector_delegate.detected_count} rays detected")
-# print(f"Top detector: {top_detector.detector_delegate.detected_count} rays detected")
-# print(f"Total rays detected: {bottom_detector.detector_delegate.detected_count + top_detector.detector_delegate.detected_count}")
+print(f"Top detector: {top_detector.detector_delegate.detected_count} rays detected")
+print(f"Total rays detected: {bottom_detector.detector_delegate.detected_count + top_detector.detector_delegate.detected_count}")
 
 # Show detection efficiency
 bottom_efficiency = bottom_detector.detector_delegate.detected_count / rays_num * 100
-# top_efficiency = top_detector.detector_delegate.detected_count / rays_num * 100
+top_efficiency = top_detector.detector_delegate.detected_count / rays_num * 100
 print(f"Bottom detection efficiency: {bottom_efficiency:.1f}%")
-# print(f"Top detection efficiency: {top_efficiency:.1f}%")
+print(f"Top detection efficiency: {top_efficiency:.1f}%")
 
 
 # After the simulation is complete, extract all detected ray directions
