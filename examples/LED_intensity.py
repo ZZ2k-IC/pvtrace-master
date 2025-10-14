@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 # unit is cm
 
 # Set up the rays number
-rays_num = 10000
+rays_num = 1000
 
 # Add nodes to the scene graph
 world = Node(
@@ -22,12 +22,22 @@ world = Node(
 box = Node(
     name="Santovac 5",
     geometry=Box(
-        (0.5, 0.5, 3),
-        material=Material(refractive_index=1.45),
+        (0.5, 0.5, 0.6),
+        material=Material(refractive_index=1.63),
     ),
     parent=world
 )
-box.translate((0, 0, 1.501))  # Position box at z=1.5
+box.translate((0, 0, 0.31))  # Position box at z=1.5
+
+box = Node(
+    name="Waveguide",
+    geometry=Box(
+        (0.5, 0.5, 4),
+        material=Material(refractive_index=1.63),
+    ),
+    parent=world
+)
+box.translate((0, 0, 2.61))  # Position box at z=1.5
 
 
 # horn = Node(
@@ -95,7 +105,7 @@ top_detector = create_planar_detector_node(
     detection_direction=(0, 0, 1), 
     parent=world
 )
-top_detector.translate((0, 0, 3))  # Position at cylinder top
+top_detector.translate((0, 0, 4.5))  # Position at cylinder top
 
 # Use meshcat to render the scene (optional)
 viewer = MeshcatRenderer(open_browser=True, transparency=False, opacity=0.5, wireframe=True)
@@ -134,7 +144,7 @@ print(f"Top detection efficiency: {top_efficiency:.1f}%")
 
 
 # After the simulation is complete, extract all detected ray directions
-all_detected_rays = (bottom_detector.detector_delegate.detected_rays)
+all_detected_rays = (top_detector.detector_delegate.detected_rays)
 
 # Extract 3D direction vectors
 detected_directions = []

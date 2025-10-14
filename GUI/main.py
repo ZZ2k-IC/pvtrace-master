@@ -708,34 +708,9 @@ class testingQT(QWidget):
                 parent = world
             )
             
-            if enableSecondLSC:
-                # Position light above the second LSC (waveguide)
-                LSC2dimX = float(self.dimx2.text())
-                LSC2dimY = float(self.dimy2.text())
-                LSC2dimZ = float(self.dimz2.text())
-                offsetX = float(self.lsc2_offsetX.text())
-                offsetY = float(self.lsc2_offsetY.text())
-                offsetZ = float(self.lsc2_offsetZ.text())
-                
-                # Determine the maximum dimension for positioning
-                LSC2shape = self.inputShape2.currentText()
-                if LSC2shape == 'Sphere':
-                    maxZ_LSC2 = LSC2dimX
-                else:
-                    maxZ_LSC2 = LSC2dimZ
-                
-                light_z = maxZ_LSC2
-                
-                light.location = (0, 0, light_z)
-                print(f"Light positioned above LSC2 at: (0, 0, {light_z})")
-                
-            else:
-                # Original positioning above primary LSC
-                if(maxZ < 1):
-                    light.location = (0,0,maxZ*1.1)
-                else:
-                    light.location = (0,0,maxZ/2+0.5)
-                print(f"Light positioned above LSC1 at: (0, 0, {light.location[2]})")
+            # Force light source to z=0
+            light.location = (0, 0, 0)
+            print(f"Light positioned at: (0, 0, 0)")
             
             return wavelengths*1e9, intensity5800, light
         

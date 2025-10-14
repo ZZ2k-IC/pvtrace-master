@@ -691,7 +691,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>1.6</string>
+      <string>1.63</string>
      </property>
      <property name="placeholderText">
       <string>x/y</string>
@@ -1586,7 +1586,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>33.33</string>
+     <string>32</string>
     </property>
    </widget>
    <widget class="QLabel" name="label_30">
