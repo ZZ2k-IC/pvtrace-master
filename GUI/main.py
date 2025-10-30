@@ -1865,6 +1865,10 @@ class testingQT(QWidget):
             count = 0
             history = [(ray, (None,None,None), Event.GENERATE)]
             
+            # Track cumulative absorption: distance traveled through absorber without being absorbed
+            # This accumulates when we skip absorption due to waveguide detection
+            accumulated_absorber_distance = 0.0
+            
             while True:
                 count += 1
                 if count > maxsteps or ray.travelled > maxpathlength:
@@ -1922,7 +1926,20 @@ class testingQT(QWidget):
                 #     corrected_adjacent = adjacent
                 
                 material = container.geometry.material
-                absorbed, at_distance = material.is_absorbed(ray, full_distance)
+                
+                # CUMULATIVE ABSORPTION: Adjust absorption check based on accumulated distance
+                # If ray has accumulated absorber distance, we need to account for that
+                effective_distance = full_distance + accumulated_absorber_distance
+                absorbed, at_distance = material.is_absorbed(ray, effective_distance)
+                
+                # Adjust at_distance to account for accumulated distance
+                if absorbed and at_distance > accumulated_absorber_distance:
+                    # Absorption occurs beyond the accumulated distance
+                    at_distance = at_distance - accumulated_absorber_distance
+                elif absorbed:
+                    # Absorption should have occurred in the accumulated segment
+                    # This means ray is absorbed immediately
+                    at_distance = 0.0
                 
                 if absorbed and at_distance < full_distance:
                     # Store ray state before propagation
@@ -1955,8 +1972,15 @@ class testingQT(QWidget):
                                     break
                             
                             if waveguide_intersection is not None:
-                                # Propagate to the waveguide interface (Point G)
+                                # CRITICAL: Accumulate the absorber transit distance
+                                # This distance would have contributed to absorption probability
+                                # We need to account for it in future absorption checks
                                 interface_distance = waveguide_intersection.distance
+                                
+                                # Add this transit distance to accumulated absorber path
+                                accumulated_absorber_distance += interface_distance
+                                
+                                # Propagate to the waveguide interface (Point G)
                                 ray = ray_before_absorption.propagate(interface_distance)
                                 
                                 # Apply Fresnel equations at the interface
@@ -1995,6 +2019,9 @@ class testingQT(QWidget):
                                         normal = (None, None, None)
                                     
                                     history.append((ray, normal, Event.TRANSMIT))
+                                    
+                                    # Reset accumulated distance since ray entered waveguide (low absorption)
+                                    accumulated_absorber_distance = 0.0
                                     continue
                         
                         # If we couldn't find the waveguide intersection, just continue (safety fallback)
@@ -2014,6 +2041,9 @@ class testingQT(QWidget):
                         else:
                             event = Event.SCATTER
                         history.append((ray, (None,None,None), event))
+                        
+                        # Reset accumulated distance after emission (new ray path)
+                        accumulated_absorber_distance = 0.0
                         continue
                     else:
                         # Non-radiative absorption - ray is absorbed
