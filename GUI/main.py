@@ -1747,24 +1747,19 @@ class testingQT(QWidget):
 
         def corrected_next_hit(scene, ray):
             """
-            Fixed next_hit that correctly determines adjacent material.
+            Container-aware next_hit that prioritizes current container's surfaces.
             
-            The original next_hit has a bug:
-            - When ray is inside waveguide A and hits waveguide A's surface
-            - It sets adjacent = intersections[1].hit (second closest intersection)
-            - If waveguide B is nearby, intersections[1] might be waveguide B!
-            - This causes wrong Fresnel calculation (treats it as A→B instead of A→absorber)
-            - Ray doesn't refract properly because both waveguides have same refractive index
+            When ray is inside a waveguide embedded in absorber:
+            - Should hit waveguide's own surface first (for TIR, refraction out)
+            - Should NOT prematurely target other nearby waveguides' surfaces
             
-            The fix: adjacent should be the actual parent/sibling material, not just
-            the second intersection in the sorted list.
+            This prevents the "attraction" problem where nearby waveguides pull rays out.
             """
-            from pvtrace.algorithm.photon_tracer import close_to_zero, distance_between
-            
             # Get all intersections
             intersections = scene.intersections(ray.position, ray.direction)
             
             # Remove on-surface intersections
+            from pvtrace.algorithm.photon_tracer import close_to_zero
             intersections = [x for x in intersections if not close_to_zero(x.distance)]
             
             # Convert to world coordinates
@@ -1773,33 +1768,57 @@ class testingQT(QWidget):
             if len(intersections) == 0:
                 return None
             
+            # Find current container
+            container = corrected_find_container(intersections)
+            
             # Single intersection case
             if len(intersections) == 1:
                 hit = intersections[0]
                 hit_node = hit.hit
                 return hit_node, (hit_node, None), hit.point, hit.distance
             
-            # Find current container
-            container = corrected_find_container(intersections)
+            # CRITICAL FIX: Filter intersections to prioritize container's own surfaces
+            # When inside a waveguide, we should hit the waveguide's surface first,
+            # NOT another waveguide's surface even if it's closer
+            
+            # Separate container surfaces from other surfaces
+            container_intersections = []
+            other_intersections = []
+            
+            for intersection in intersections:
+                if intersection.hit == container:
+                    # This is the container's own surface
+                    container_intersections.append(intersection)
+                else:
+                    # This is another object's surface
+                    other_intersections.append(intersection)
+            
+            # If we have container surfaces, ALWAYS prioritize them
+            # This prevents rays from "escaping" to nearby objects
+            if len(container_intersections) > 0:
+                # Use closest container surface
+                hit = container_intersections[0]
+                hit_node = hit.hit
+                point = hit.point
+                distance = hit.distance
+                
+                # Adjacent is the next container we'll enter
+                if len(other_intersections) > 0:
+                    adjacent = other_intersections[0].hit
+                else:
+                    adjacent = scene.root  # Exit to world
+                
+                return hit_node, (container, adjacent), point, distance
+            
+            # If no container surfaces (shouldn't happen), fall back to original logic
             hit = intersections[0]
             hit_node = hit.hit
             point = hit.point
-            distance = distance_between(ray.position, point)
+            distance = hit.distance
             
-            # CRITICAL FIX: Determine adjacent correctly
             if container == hit_node:
-                # Ray is exiting the container
-                # Adjacent should be the material we're entering, which is the container's parent
-                # NOT just intersections[1] which might be a sibling object!
-                
-                # Check if container has a parent that's not World
-                if container.parent and container.parent != scene.root:
-                    adjacent = container.parent
-                else:
-                    # Exiting to World/air
-                    adjacent = scene.root
+                adjacent = intersections[1].hit if len(intersections) > 1 else None
             else:
-                # Ray is entering the container
                 adjacent = hit_node
             
             return hit_node, (container, adjacent), point, distance
@@ -1807,7 +1826,7 @@ class testingQT(QWidget):
         def verify_actual_container(scene, ray_position):
             """
             Simple container check: cast ray in +X direction, check nearest intersection.
-            If nearest is LSC2_Waveguide, ray is in waveguide. Otherwise, in LSC.
+            If nearest is any waveguide (LSC2/3/4), ray is in waveguide. Otherwise, in LSC.
             """
             # Single ray cast in +X direction
             intersections = scene.intersections(ray_position, (1, 0, 0))
@@ -1830,6 +1849,17 @@ class testingQT(QWidget):
                 return None
             
             return nearest_name
+            
+            # Return name of nearest intersection
+            nearest_name = intersections[0].hit.name
+            
+            # Filter out World and Detector
+            if "World" in nearest_name or "Detector" in nearest_name:
+                if len(intersections) > 1:
+                    return intersections[1].hit.name
+                return None
+            
+            return nearest_name
 
         def corrected_follow(scene, ray, maxsteps=1000, maxpathlength=np.inf, emit_method='kT'):
             count = 0
@@ -1841,7 +1871,7 @@ class testingQT(QWidget):
                     history.append((ray, (None,None,None), Event.KILL))
                     break
             
-                info = next_hit(scene, ray)
+                info = corrected_next_hit(scene, ray)  # Use corrected version
                 if info is None:
                     history.append((ray, (None,None,None), Event.EXIT))
                     break
@@ -1883,16 +1913,84 @@ class testingQT(QWidget):
                 absorbed, at_distance = material.is_absorbed(ray, full_distance)
                 
                 if absorbed and at_distance < full_distance:
-                    ray = ray.propagate(at_distance)
+                    # Store ray state before propagation
+                    ray_before_absorption = ray
+                    ray_after_absorption = ray.propagate(at_distance)
                     
-                    # SAFETY CHECK: Simple X-direction check before absorption
-                    actual_container_name = verify_actual_container(scene, ray.position)
+                    # SAFETY CHECK: Verify which object we're actually in
+                    actual_container_name = verify_actual_container(scene, ray_after_absorption.position)
                     
-                    # If nearest object is any waveguide (LSC2/3/4), skip absorption (continue propagating)
+                    # If absorption point is inside a different waveguide, we need to handle the interface properly
                     if actual_container_name in ["LSC2_Waveguide", "LSC3_Waveguide", "LSC4_Waveguide"]:
-                        continue  # Don't absorb, keep tracing
+                        # Find the waveguide node
+                        waveguide_node = None
+                        for node in scene.root.children:
+                            if node.name == actual_container_name:
+                                waveguide_node = node
+                                break
+                        
+                        if waveguide_node is not None:
+                            # Find intersection from current container to the waveguide
+                            # Start from ray_before_absorption, find where it enters the waveguide
+                            test_ray = ray_before_absorption
+                            intersections = scene.intersections(test_ray.position, test_ray.direction)
+                            
+                            # Find the first intersection with the target waveguide
+                            waveguide_intersection = None
+                            for intersection in intersections:
+                                if intersection.hit.name == actual_container_name:
+                                    waveguide_intersection = intersection
+                                    break
+                            
+                            if waveguide_intersection is not None:
+                                # Propagate to the waveguide interface (Point G)
+                                interface_distance = waveguide_intersection.distance
+                                ray = ray_before_absorption.propagate(interface_distance)
+                                
+                                # Apply Fresnel equations at the interface
+                                interface_hit = waveguide_intersection.hit
+                                interface_surface = interface_hit.geometry.material.surface
+                                ray = ray.representation(scene.root, interface_hit)
+                                
+                                # Determine if ray reflects or transmits
+                                if interface_surface.is_reflected(ray, interface_hit.geometry, container, waveguide_node):
+                                    # Ray reflects back into absorber
+                                    ray = interface_surface.reflect(ray, interface_hit.geometry, container, waveguide_node)
+                                    ray = ray.representation(interface_hit, scene.root)
+                                    
+                                    try:
+                                        local_pos = list(np.array(ray.position) - np.array(interface_hit.location))
+                                        normal = interface_hit.geometry.normal(local_pos)
+                                    except:
+                                        normal = (None, None, None)
+                                    
+                                    history.append((ray, normal, Event.REFLECT))
+                                    continue
+                                else:
+                                    # Ray transmits into waveguide
+                                    ref_ray = interface_surface.transmit(ray, interface_hit.geometry, container, waveguide_node)
+                                    if ref_ray is None:
+                                        history.append((ray, (None,None,None), Event.KILL))
+                                        break
+                                    
+                                    ray = ref_ray
+                                    ray = ray.representation(interface_hit, scene.root)
+                                    
+                                    try:
+                                        local_pos = list(np.array(ray.position) - np.array(interface_hit.location))
+                                        normal = interface_hit.geometry.normal(local_pos)
+                                    except:
+                                        normal = (None, None, None)
+                                    
+                                    history.append((ray, normal, Event.TRANSMIT))
+                                    continue
+                        
+                        # If we couldn't find the waveguide intersection, just continue (safety fallback)
+                        ray = ray_after_absorption
+                        continue
                     
-                    # If nearest is LSC or anything else, proceed with absorption
+                    # Normal absorption in the correct container (LSC absorber)
+                    ray = ray_after_absorption
                     component = material.component(ray.wavelength)
                     if component is not None and component.is_radiative(ray):
                         ray = component.emit(ray.representation(scene.root, container), method=emit_method)
@@ -1906,21 +2004,13 @@ class testingQT(QWidget):
                         history.append((ray, (None,None,None), event))
                         continue
                     else:
-                        # Final check before absorbing - log which object is absorbing
-                        actual_absorber = actual_container_name if actual_container_name else container.name
+                        # Non-radiative absorption - ray is absorbed
                         history.append((ray, (None,None,None), Event.ABSORB))
                         break
                 else:
                     ray = ray.propagate(full_distance)
                     surface = hit.geometry.material.surface
                     ray = ray.representation(scene.root, hit)
-                    # DEBUG: Log container and adjacent when hitting waveguide surfaces
-                    if "Waveguide" in hit.name:
-                        print(f"DEBUG: Ray hitting {hit.name}")
-                        print(f"  Container: {container.name if container else 'None'}")
-                        print(f"  Adjacent: {corrected_adjacent.name if corrected_adjacent else 'None'}")
-                        print(f"  Container n: {container.geometry.material.refractive_index if container else 'N/A'}")
-                        print(f"  Adjacent n: {corrected_adjacent.geometry.material.refractive_index if corrected_adjacent else 'N/A'}")
                     
                     # Use corrected adjacent for surface interactions
                     if surface.is_reflected(ray, hit.geometry, container, corrected_adjacent):
@@ -2032,10 +2122,6 @@ class testingQT(QWidget):
                 LSC2 = createSphLSC(LSC2dimX, wavAbs2, wavN2)
             elif(LSC2shape == 'Import Mesh'):
                 LSC2 = createMeshLSC(self, wavAbs2, wavN2, self.STLfile2)
-            
-            # CRITICAL FIX: Set waveguide's parent to LSC absorber (not world)
-            # This establishes proper nesting: LSC contains waveguides
-            LSC2.parent = LSC
             
             # Position the second LSC
             LSC2.location = [offsetX, offsetY, offsetZ]
