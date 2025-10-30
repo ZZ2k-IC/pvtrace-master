@@ -1388,12 +1388,11 @@ class testingQT(QWidget):
             # Histogram of absorbed rays along Y direction (-0.6 to 0.6)
             plt.figure(8, clear=True)
             if ypos_abs:  # Check if there are absorbed rays
-                plt.hist(ypos_abs, bins=50, range=(-0.6, 0.6), alpha=0.7, color='green', edgecolor='black')
+                plt.hist(ypos_abs, bins=50, range=(-3, 3), alpha=0.7, color='green', edgecolor='black')
                 plt.title(f'Absorbed rays distribution along Y-axis ({len(absorbed_rays)} rays)')
                 plt.xlabel('Y position (cm)')
                 plt.ylabel('Number of absorbed rays')
                 plt.grid(True, alpha=0.3)
-                plt.xlim(-0.6, 0.6)
                 
                 # Add statistics text
                 y_mean = np.mean(ypos_abs)
@@ -1825,41 +1824,58 @@ class testingQT(QWidget):
 
         def verify_actual_container(scene, ray_position):
             """
-            Simple container check: cast ray in +X direction, check nearest intersection.
-            If nearest is any waveguide (LSC2/3/4), ray is in waveguide. Otherwise, in LSC.
+            Enhanced container check: cast rays in both +X and -X directions.
+            If BOTH nearest intersections are waveguides (LSC2/3/4), ray is inside waveguide.
+            Otherwise, ray is in LSC absorber.
             """
-            # Single ray cast in +X direction
-            intersections = scene.intersections(ray_position, (1, 0, 0))
-            intersections = [x for x in intersections if not np.isclose(x.distance, 0.0)]
+            # Cast ray in +X direction
+            intersections_pos = scene.intersections(ray_position, (1, 0, 0))
+            intersections_pos = [x for x in intersections_pos if not np.isclose(x.distance, 0.0)]
             
-            if len(intersections) == 0:
-                return None  # In World
+            # Cast ray in -X direction
+            intersections_neg = scene.intersections(ray_position, (-1, 0, 0))
+            intersections_neg = [x for x in intersections_neg if not np.isclose(x.distance, 0.0)]
+            
+            # Check if we have intersections in both directions
+            if len(intersections_pos) == 0 or len(intersections_neg) == 0:
+                return None  # In World or edge case
             
             # Convert to world coordinates and sort by distance
-            intersections = [x.to(scene.root) for x in intersections]
-            intersections.sort(key=lambda x: x.distance)
+            intersections_pos = [x.to(scene.root) for x in intersections_pos]
+            intersections_pos.sort(key=lambda x: x.distance)
             
-            # Return name of nearest intersection
-            nearest_name = intersections[0].hit.name
+            intersections_neg = [x.to(scene.root) for x in intersections_neg]
+            intersections_neg.sort(key=lambda x: x.distance)
             
-            # Filter out World and Detector
-            if "World" in nearest_name or "Detector" in nearest_name:
-                if len(intersections) > 1:
-                    return intersections[1].hit.name
-                return None
+            # Get nearest intersections in both directions
+            nearest_pos_name = intersections_pos[0].hit.name
+            nearest_neg_name = intersections_neg[0].hit.name
             
-            return nearest_name
+            # Filter out World and Detector for positive direction
+            if "World" in nearest_pos_name or "Detector" in nearest_pos_name:
+                if len(intersections_pos) > 1:
+                    nearest_pos_name = intersections_pos[1].hit.name
+                else:
+                    nearest_pos_name = None
             
-            # Return name of nearest intersection
-            nearest_name = intersections[0].hit.name
+            # Filter out World and Detector for negative direction
+            if "World" in nearest_neg_name or "Detector" in nearest_neg_name:
+                if len(intersections_neg) > 1:
+                    nearest_neg_name = intersections_neg[1].hit.name
+                else:
+                    nearest_neg_name = None
             
-            # Filter out World and Detector
-            if "World" in nearest_name or "Detector" in nearest_name:
-                if len(intersections) > 1:
-                    return intersections[1].hit.name
-                return None
+            # Check if BOTH directions hit waveguides
+            is_pos_waveguide = nearest_pos_name in ["LSC2_Waveguide", "LSC3_Waveguide", "LSC4_Waveguide"]
+            is_neg_waveguide = nearest_neg_name in ["LSC2_Waveguide", "LSC3_Waveguide", "LSC4_Waveguide"]
             
-            return nearest_name
+            if is_pos_waveguide and is_neg_waveguide:
+                # Ray is surrounded by waveguide material in both directions
+                # Return the waveguide name (should be the same in both directions)
+                return nearest_pos_name
+            else:
+                # Ray is in LSC absorber (at least one direction hits LSC)
+                return "LSC"
 
         def corrected_follow(scene, ray, maxsteps=1000, maxpathlength=np.inf, emit_method='kT'):
             count = 0
