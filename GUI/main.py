@@ -1899,7 +1899,19 @@ class testingQT(QWidget):
                     history.append((ray.propagate(full_distance), (None,None,None), Event.EXIT))
                     break
 
+                # BRUTAL FIX: Force adjacent to be LSC when exiting any waveguide
+                # Since waveguides are embedded in LSC and separated from each other,
+                # any waveguide exit should interact with LSC material, not other waveguides
                 corrected_adjacent = adjacent
+                
+                if "Waveguide" in container.name and container.name == hit.name:
+                    # Ray is inside a waveguide hitting its own surface (exiting)
+                    # Force adjacent to be the LSC absorber (parent)
+                    for node in scene.root.children:
+                        if node.name == "LSC":
+                            corrected_adjacent = node
+                            break
+                
                 # # FIX: Correct adjacent detection for waveguide surfaces in the air
                 # if hit.name == "LSC2_Waveguide" and container.name == "LSC2_Waveguide":
                 #     # Ray is inside waveguide hitting waveguide surface
