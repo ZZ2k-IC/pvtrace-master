@@ -1379,6 +1379,240 @@
      </property>
     </widget>
     
+    <!-- Enable LSC3 Checkbox -->
+    <widget class="QCheckBox" name="checkBox_LSC3">
+     <property name="geometry">
+      <rect>
+       <x>300</x>
+       <y>180</y>
+       <width>100</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Enable LSC3</string>
+     </property>
+     <property name="checked">
+      <bool>false</bool>
+     </property>
+    </widget>
+    
+    <!-- LSC3 Position Controls -->
+    <widget class="QLabel" name="label_lsc3">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>180</y>
+       <width>131</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>LSC3 Position (cm):</string>
+     </property>
+    </widget>
+    
+    <widget class="QLabel" name="label_offset3X">
+     <property name="geometry">
+      <rect>
+       <x>146</x>
+       <y>180</y>
+       <width>21</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>X</string>
+     </property>
+    </widget>
+    
+    <widget class="QLineEdit" name="lineEdit_offset3X">
+     <property name="geometry">
+      <rect>
+       <x>146</x>
+       <y>200</y>
+       <width>41</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>0</string>
+     </property>
+    </widget>
+    
+    <widget class="QLabel" name="label_offset3Y">
+     <property name="geometry">
+      <rect>
+       <x>196</x>
+       <y>180</y>
+       <width>21</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Y</string>
+     </property>
+    </widget>
+    
+    <widget class="QLineEdit" name="lineEdit_offset3Y">
+     <property name="geometry">
+      <rect>
+       <x>196</x>
+       <y>200</y>
+       <width>41</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>0</string>
+     </property>
+    </widget>
+    
+    <widget class="QLabel" name="label_offset3Z">
+     <property name="geometry">
+      <rect>
+       <x>246</x>
+       <y>180</y>
+       <width>21</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Z</string>
+     </property>
+    </widget>
+    
+    <widget class="QLineEdit" name="lineEdit_offset3Z">
+     <property name="geometry">
+      <rect>
+       <x>246</x>
+       <y>200</y>
+       <width>41</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>0</string>
+     </property>
+    </widget>
+    
+    <!-- Enable LSC4 Checkbox -->
+    <widget class="QCheckBox" name="checkBox_LSC4">
+     <property name="geometry">
+      <rect>
+       <x>300</x>
+       <y>230</y>
+       <width>100</width>
+       <height>20</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Enable LSC4</string>
+     </property>
+     <property name="checked">
+      <bool>false</bool>
+     </property>
+    </widget>
+    
+    <!-- LSC4 Position Controls -->
+    <widget class="QLabel" name="label_lsc4">
+     <property name="geometry">
+      <rect>
+       <x>10</x>
+       <y>230</y>
+       <width>131</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>LSC4 Position (cm):</string>
+     </property>
+    </widget>
+    
+    <widget class="QLabel" name="label_offset4X">
+     <property name="geometry">
+      <rect>
+       <x>146</x>
+       <y>230</y>
+       <width>21</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>X</string>
+     </property>
+    </widget>
+    
+    <widget class="QLineEdit" name="lineEdit_offset4X">
+     <property name="geometry">
+      <rect>
+       <x>146</x>
+       <y>250</y>
+       <width>41</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>0</string>
+     </property>
+    </widget>
+    
+    <widget class="QLabel" name="label_offset4Y">
+     <property name="geometry">
+      <rect>
+       <x>196</x>
+       <y>230</y>
+       <width>21</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Y</string>
+     </property>
+    </widget>
+    
+    <widget class="QLineEdit" name="lineEdit_offset4Y">
+     <property name="geometry">
+      <rect>
+       <x>196</x>
+       <y>250</y>
+       <width>41</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>0</string>
+     </property>
+    </widget>
+    
+    <widget class="QLabel" name="label_offset4Z">
+     <property name="geometry">
+      <rect>
+       <x>246</x>
+       <y>230</y>
+       <width>21</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>Z</string>
+     </property>
+    </widget>
+    
+    <widget class="QLineEdit" name="lineEdit_offset4Z">
+     <property name="geometry">
+      <rect>
+       <x>246</x>
+       <y>250</y>
+       <width>41</width>
+       <height>21</height>
+      </rect>
+     </property>
+     <property name="text">
+      <string>0</string>
+     </property>
+    </widget>
+    
     
    </widget>
   </widget>

@@ -156,9 +156,29 @@ class testingQT(QWidget):
         self.lsc2_offsetY = self.findChild(QtWidgets.QLineEdit,'lineEdit_offsetY')
         self.lsc2_offsetZ = self.findChild(QtWidgets.QLineEdit,'lineEdit_offsetZ')
         
+        # Third LSC positioning (LSC3)
+        self.lsc3_offsetX = self.findChild(QtWidgets.QLineEdit,'lineEdit_offset3X')
+        self.lsc3_offsetY = self.findChild(QtWidgets.QLineEdit,'lineEdit_offset3Y')
+        self.lsc3_offsetZ = self.findChild(QtWidgets.QLineEdit,'lineEdit_offset3Z')
+        
+        # Fourth LSC positioning (LSC4)
+        self.lsc4_offsetX = self.findChild(QtWidgets.QLineEdit,'lineEdit_offset4X')
+        self.lsc4_offsetY = self.findChild(QtWidgets.QLineEdit,'lineEdit_offset4Y')
+        self.lsc4_offsetZ = self.findChild(QtWidgets.QLineEdit,'lineEdit_offset4Z')
+        
+        # Enable checkboxes for LSC3 and LSC4
+        self.enableLSC3 = self.findChild(QtWidgets.QCheckBox,'checkBox_LSC3')
+        self.enableLSC4 = self.findChild(QtWidgets.QCheckBox,'checkBox_LSC4')
+        
         # Connect signals
         self.enableSecondLSC.stateChanged.connect(self.onEnableSecondLSC)
         self.inputShape2.currentTextChanged.connect(self.onShape2Changed)
+        
+        # Connect LSC3 and LSC4 enable signals
+        if self.enableLSC3:
+            self.enableLSC3.stateChanged.connect(self.onEnableLSC3)
+        if self.enableLSC4:
+            self.enableLSC4.stateChanged.connect(self.onEnableLSC4)
 
 
     def onEnableDetector(self):
@@ -206,6 +226,39 @@ class testingQT(QWidget):
             self.STLfile2 = self.STLfile2[0]
             print(f"Selected STL file: {self.STLfile2}")
     
+    def onEnableLSC3(self):
+        """Handle LSC3 enable/disable"""
+        if self.enableLSC3 is None:
+            print("ERROR: enableLSC3 is None!")
+            return
+            
+        enabled = self.enableLSC3.isChecked()
+        print(f"LSC3 enabled: {enabled}")
+        
+        # Enable/disable LSC3 controls
+        if self.lsc3_offsetX:
+            self.lsc3_offsetX.setEnabled(enabled)
+        if self.lsc3_offsetY:
+            self.lsc3_offsetY.setEnabled(enabled)
+        if self.lsc3_offsetZ:
+            self.lsc3_offsetZ.setEnabled(enabled)
+    
+    def onEnableLSC4(self):
+        """Handle LSC4 enable/disable"""
+        if self.enableLSC4 is None:
+            print("ERROR: enableLSC4 is None!")
+            return
+            
+        enabled = self.enableLSC4.isChecked()
+        print(f"LSC4 enabled: {enabled}")
+        
+        # Enable/disable LSC4 controls
+        if self.lsc4_offsetX:
+            self.lsc4_offsetX.setEnabled(enabled)
+        if self.lsc4_offsetY:
+            self.lsc4_offsetY.setEnabled(enabled)
+        if self.lsc4_offsetZ:
+            self.lsc4_offsetZ.setEnabled(enabled)
 
     def load_ui(self):
         loader = QUiLoader()
@@ -449,7 +502,7 @@ class testingQT(QWidget):
             name="World",
             geometry = Sphere(
                 radius = 1.1*dim,
-                material=Material(refractive_index=1.0),
+                material=Material(refractive_index=1.63),
                 )   
             )
             
@@ -1692,49 +1745,91 @@ class testingQT(QWidget):
         # Apply the fix
         photon_tracer.find_container = corrected_find_container
 
-        def priority_next_hit(scene, ray):
-            """Modified next_hit that prioritizes LSC2_Waveguide over LSC when overlapping"""
+        def corrected_next_hit(scene, ray):
+            """
+            Fixed next_hit that correctly determines adjacent material.
             
-            result = original_next_hit(scene, ray)
-            if result is None:
+            The original next_hit has a bug:
+            - When ray is inside waveguide A and hits waveguide A's surface
+            - It sets adjacent = intersections[1].hit (second closest intersection)
+            - If waveguide B is nearby, intersections[1] might be waveguide B!
+            - This causes wrong Fresnel calculation (treats it as A→B instead of A→absorber)
+            - Ray doesn't refract properly because both waveguides have same refractive index
+            
+            The fix: adjacent should be the actual parent/sibling material, not just
+            the second intersection in the sorted list.
+            """
+            from pvtrace.algorithm.photon_tracer import close_to_zero, distance_between
+            
+            # Get all intersections
+            intersections = scene.intersections(ray.position, ray.direction)
+            
+            # Remove on-surface intersections
+            intersections = [x for x in intersections if not close_to_zero(x.distance)]
+            
+            # Convert to world coordinates
+            intersections = [x.to(scene.root) for x in intersections]
+            
+            if len(intersections) == 0:
                 return None
-                
-            hit, (container, adjacent), point, full_distance = result
             
-            # PRIORITY RULE: If ray is inside LSC2_Waveguide, ignore LSC intersections
-            if container.name == "LSC2_Waveguide":
-                # Ray is inside waveguide - filter out absorber intersections
-                intersections = scene.intersections(ray.position, ray.direction)
-                intersections = [x for x in intersections if not np.isclose(x.distance, 0.0)]
-                intersections = [x.to(scene.root) for x in intersections]
-                
-                # Remove LSC (absorber) intersections when inside LSC2_Waveguide
-                filtered_intersections = []
-                for intersection in intersections:
-                    if intersection.hit.name != "LSC":  # LSC is the absorber
-                        filtered_intersections.append(intersection)
-                
-                if filtered_intersections:
-                    # Sort by distance and take closest non-absorber intersection
-                    filtered_intersections.sort(key=lambda x: x.distance)
-                    hit = filtered_intersections[0].hit
-                    point = filtered_intersections[0].point
-                    full_distance = filtered_intersections[0].distance
-                    
-                    # Recalculate adjacent for the new hit
-                    if hit == container:
-                        # Ray hitting waveguide surface from inside
-                        adjacent = scene.root  # World
-                    else:
-                        # Ray hitting something else
-                        adjacent = hit
-                        
-                    return hit, (container, adjacent), point, full_distance
+            # Single intersection case
+            if len(intersections) == 1:
+                hit = intersections[0]
+                hit_node = hit.hit
+                return hit_node, (hit_node, None), hit.point, hit.distance
             
-            # For all other cases, use original result
-            return result
-        
-        photon_tracer.next_hit = priority_next_hit
+            # Find current container
+            container = corrected_find_container(intersections)
+            hit = intersections[0]
+            hit_node = hit.hit
+            point = hit.point
+            distance = distance_between(ray.position, point)
+            
+            # CRITICAL FIX: Determine adjacent correctly
+            if container == hit_node:
+                # Ray is exiting the container
+                # Adjacent should be the material we're entering, which is the container's parent
+                # NOT just intersections[1] which might be a sibling object!
+                
+                # Check if container has a parent that's not World
+                if container.parent and container.parent != scene.root:
+                    adjacent = container.parent
+                else:
+                    # Exiting to World/air
+                    adjacent = scene.root
+            else:
+                # Ray is entering the container
+                adjacent = hit_node
+            
+            return hit_node, (container, adjacent), point, distance
+
+        def verify_actual_container(scene, ray_position):
+            """
+            Simple container check: cast ray in +X direction, check nearest intersection.
+            If nearest is LSC2_Waveguide, ray is in waveguide. Otherwise, in LSC.
+            """
+            # Single ray cast in +X direction
+            intersections = scene.intersections(ray_position, (1, 0, 0))
+            intersections = [x for x in intersections if not np.isclose(x.distance, 0.0)]
+            
+            if len(intersections) == 0:
+                return None  # In World
+            
+            # Convert to world coordinates and sort by distance
+            intersections = [x.to(scene.root) for x in intersections]
+            intersections.sort(key=lambda x: x.distance)
+            
+            # Return name of nearest intersection
+            nearest_name = intersections[0].hit.name
+            
+            # Filter out World and Detector
+            if "World" in nearest_name or "Detector" in nearest_name:
+                if len(intersections) > 1:
+                    return intersections[1].hit.name
+                return None
+            
+            return nearest_name
 
         def corrected_follow(scene, ray, maxsteps=1000, maxpathlength=np.inf, emit_method='kT'):
             count = 0
@@ -1789,6 +1884,15 @@ class testingQT(QWidget):
                 
                 if absorbed and at_distance < full_distance:
                     ray = ray.propagate(at_distance)
+                    
+                    # SAFETY CHECK: Simple X-direction check before absorption
+                    actual_container_name = verify_actual_container(scene, ray.position)
+                    
+                    # If nearest object is any waveguide (LSC2/3/4), skip absorption (continue propagating)
+                    if actual_container_name in ["LSC2_Waveguide", "LSC3_Waveguide", "LSC4_Waveguide"]:
+                        continue  # Don't absorb, keep tracing
+                    
+                    # If nearest is LSC or anything else, proceed with absorption
                     component = material.component(ray.wavelength)
                     if component is not None and component.is_radiative(ray):
                         ray = component.emit(ray.representation(scene.root, container), method=emit_method)
@@ -1802,12 +1906,21 @@ class testingQT(QWidget):
                         history.append((ray, (None,None,None), event))
                         continue
                     else:
+                        # Final check before absorbing - log which object is absorbing
+                        actual_absorber = actual_container_name if actual_container_name else container.name
                         history.append((ray, (None,None,None), Event.ABSORB))
                         break
                 else:
                     ray = ray.propagate(full_distance)
                     surface = hit.geometry.material.surface
                     ray = ray.representation(scene.root, hit)
+                    # DEBUG: Log container and adjacent when hitting waveguide surfaces
+                    if "Waveguide" in hit.name:
+                        print(f"DEBUG: Ray hitting {hit.name}")
+                        print(f"  Container: {container.name if container else 'None'}")
+                        print(f"  Adjacent: {corrected_adjacent.name if corrected_adjacent else 'None'}")
+                        print(f"  Container n: {container.geometry.material.refractive_index if container else 'N/A'}")
+                        print(f"  Adjacent n: {corrected_adjacent.geometry.material.refractive_index if corrected_adjacent else 'N/A'}")
                     
                     # Use corrected adjacent for surface interactions
                     if surface.is_reflected(ray, hit.geometry, container, corrected_adjacent):
@@ -1844,7 +1957,7 @@ class testingQT(QWidget):
 
         # Apply the fixes
         photon_tracer.find_container = corrected_find_container
-        photon_tracer.next_hit = priority_next_hit
+        photon_tracer.next_hit = corrected_next_hit
         photon_tracer.follow = corrected_follow
 
         if(enclosingBox):
@@ -1920,6 +2033,10 @@ class testingQT(QWidget):
             elif(LSC2shape == 'Import Mesh'):
                 LSC2 = createMeshLSC(self, wavAbs2, wavN2, self.STLfile2)
             
+            # CRITICAL FIX: Set waveguide's parent to LSC absorber (not world)
+            # This establishes proper nesting: LSC contains waveguides
+            LSC2.parent = LSC
+            
             # Position the second LSC
             LSC2.location = [offsetX, offsetY, offsetZ]
             LSC2.name = "LSC2_Waveguide"
@@ -1989,6 +2106,50 @@ class testingQT(QWidget):
             
             # Configure second LSC surfaces (waveguide properties)
             LSC2 = addWaveguideSurfaces(LSC2)
+            
+            # Create LSC3 (third waveguide - same properties as LSC2) if enabled
+            if self.enableLSC3 and self.enableLSC3.isChecked():
+                if(LSC2shape == 'Box'):
+                    LSC3 = createBoxLSC(LSC2dimX, LSC2dimY, LSC2dimZ, wavAbs2, wavN2)
+                elif(LSC2shape == 'Cylinder'):
+                    LSC3 = createCylLSC(LSC2dimX, LSC2dimZ, wavAbs2, wavN2)
+                elif(LSC2shape == 'Sphere'):
+                    LSC3 = createSphLSC(LSC2dimX, wavAbs2, wavN2)
+                elif(LSC2shape == 'Import Mesh'):
+                    LSC3 = createMeshLSC(self, wavAbs2, wavN2, self.STLfile2)
+                
+                # Position LSC3 (using offset3 parameters)
+                offsetX3 = float(self.lsc3_offsetX.text())
+                offsetY3 = float(self.lsc3_offsetY.text())
+                offsetZ3 = float(self.lsc3_offsetZ.text())
+                LSC3.location = [offsetX3, offsetY3, offsetZ3]
+                LSC3.name = "LSC3_Waveguide"
+                
+                if(LumType2 == 'Lumogen Red'):
+                    LSC3, _, _, _ = addLR305(LSC3, LumConc2, LumPLQY2)
+                LSC3 = addWaveguideSurfaces(LSC3)
+            
+            # Create LSC4 (fourth waveguide - same properties as LSC2) if enabled
+            if self.enableLSC4 and self.enableLSC4.isChecked():
+                if(LSC2shape == 'Box'):
+                    LSC4 = createBoxLSC(LSC2dimX, LSC2dimY, LSC2dimZ, wavAbs2, wavN2)
+                elif(LSC2shape == 'Cylinder'):
+                    LSC4 = createCylLSC(LSC2dimX, LSC2dimZ, wavAbs2, wavN2)
+                elif(LSC2shape == 'Sphere'):
+                    LSC4 = createSphLSC(LSC2dimX, wavAbs2, wavN2)
+                elif(LSC2shape == 'Import Mesh'):
+                    LSC4 = createMeshLSC(self, wavAbs2, wavN2, self.STLfile2)
+                
+                # Position LSC4 (using offset4 parameters)
+                offsetX4 = float(self.lsc4_offsetX.text())
+                offsetY4 = float(self.lsc4_offsetY.text())
+                offsetZ4 = float(self.lsc4_offsetZ.text())
+                LSC4.location = [offsetX4, offsetY4, offsetZ4]
+                LSC4.name = "LSC4_Waveguide"
+                
+                if(LumType2 == 'Lumogen Red'):
+                    LSC4, _, _, _ = addLR305(LSC4, LumConc2, LumPLQY2)
+                LSC4 = addWaveguideSurfaces(LSC4)
         
         wavelengths, intensity, light = initLight(lightWavMin, lightWavMax)
         if(lightPattern == 'Rectangle Mask'):
