@@ -2506,6 +2506,8 @@ class testingQT(QWidget):
                 #     LSCdimY = temp
                 #     lightDimY = LSCdimY
                 #     maxZ = LSCdimZ
+            # ✅ NEW: Position LSC so its bottom is 0.1mm BELOW world center
+            LSC.location = (0, 0, LSCdimZ/2 - 0.1)
         else:
             if(LSCshape == 'Box'):
                 LSC = createBoxLSC(LSCdimX, LSCdimY, thinFilmThick, wavAbs, wavN)
