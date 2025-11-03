@@ -222,9 +222,35 @@ class testingQT(QWidget):
             return
             
         if(self.inputShape2.currentText() == 'Import Mesh'):
-            self.STLfile2 = QtWidgets.QFileDialog.getOpenFileName(self, 'OpenFile')
-            self.STLfile2 = self.STLfile2[0]
-            print(f"Selected STL file: {self.STLfile2}")
+            # Present choice: Single file or folder with multiple files
+            choice = QtWidgets.QMessageBox.question(
+                self,
+                'Import Mode',
+                'Do you want to import multiple STL files from a folder?\n\n'
+                'Yes = Select folder containing multiple STL files (recommended)\n'
+                'No = Select a single STL file',
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No,
+                QtWidgets.QMessageBox.Yes
+            )
+            
+            if choice == QtWidgets.QMessageBox.Yes:
+                # Folder mode - select folder
+                self.STLfile2 = QtWidgets.QFileDialog.getExistingDirectory(
+                    self, 
+                    'Select Folder with STL Files'
+                )
+                if self.STLfile2:
+                    print(f"Selected folder: {self.STLfile2}")
+                else:
+                    print("No folder selected")
+            else:
+                # Single file mode
+                self.STLfile2 = QtWidgets.QFileDialog.getOpenFileName(self, 'Select STL File')
+                self.STLfile2 = self.STLfile2[0]
+                if self.STLfile2:
+                    print(f"Selected STL file: {self.STLfile2}")
+                else:
+                    print("No file selected")
     
     def onEnableLSC3(self):
         """Handle LSC3 enable/disable"""
@@ -450,7 +476,7 @@ class testingQT(QWidget):
         dataFile = ''
         if(self.saveFolder != ''):
             self.saveFileName = self.saveFileNameShow.text()
-            dataFile = open(self.saveFolder+'/'+self.saveFileName+'.txt','a')
+            dataFile = open(self.saveFolder+'/'+self.saveFileName+'.txt','a', encoding='utf-8')
 
             dataFile.write("LSC Shape\t" + self.inputShape.currentText() + "\n")
             if(self.inputShape.currentText()=='Import Mesh'):
@@ -588,6 +614,184 @@ class testingQT(QWidget):
             )
             LSC.location = [0,0,0]
             return LSC
+        
+        def createMultiPartMeshLSC(self, wavAbs, wavN, stl_path, parent_node):
+            """
+            Load multiple STL files from a folder and create separate child nodes.
+            This ensures each part has a unique identity for correct container detection.
+            
+            Args:
+                wavAbs: Absorption coefficient
+                wavN: Refractive index
+                stl_path: Path to either:
+                    - A single STL file (backward compatible)
+                    - A folder containing multiple STL files
+                parent_node: Parent node to attach children to (usually world or LSC)
+            
+            Returns:
+                Tuple of (parent_container, list_of_part_nodes)
+            """
+            import os
+            import glob
+            
+            # Check if path is a directory or file
+            if os.path.isdir(stl_path):
+                # FOLDER MODE: Load all STL files from folder
+                stl_files = sorted(glob.glob(os.path.join(stl_path, "*.stl")))
+                if len(stl_files) == 0:
+                    print(f"ERROR: No STL files found in folder: {stl_path}")
+                    return None, []
+                
+                print(f"Folder mode: Found {len(stl_files)} STL file(s) in {stl_path}")
+                
+                if len(stl_files) == 1:
+                    # Single file - create one node
+                    mesh = trimesh.load(stl_files[0])
+                    print(f"  Loading single file: {os.path.basename(stl_files[0])}")
+                    waveguide = Node(
+                        name="LSC2_Waveguide",
+                        geometry=Mesh(
+                            trimesh=mesh,
+                            material=Material(
+                                refractive_index=wavN,
+                                components=[
+                                    Absorber(coefficient=wavAbs*1.00),
+                                    Scatterer(coefficient=wavAbs*0.00)
+                                ]
+                            )
+                        ),
+                        parent=parent_node
+                    )
+                    return waveguide, [waveguide]
+                
+                else:
+                    # Multiple files - create parent + children
+                    print(f"  Creating parent container with {len(stl_files)} child nodes")
+                    
+                    # Load all meshes first to get their centroids
+                    meshes = []
+                    centroids = []
+                    for stl_file in stl_files:
+                        mesh = trimesh.load(stl_file)
+                        meshes.append(mesh)
+                        centroids.append(mesh.centroid)
+                    
+                    # Calculate the reference position (centroid of first part)
+                    reference_centroid = centroids[0]
+                    print(f"  Reference centroid (Part 0): [{reference_centroid[0]:.3f}, {reference_centroid[1]:.3f}, {reference_centroid[2]:.3f}]")
+                    
+                    # Create parent container (no geometry, just for organization)
+                    parent_container = Node(
+                        name="LSC2_Waveguide_Parent",
+                        parent=parent_node
+                    )
+                    
+                    part_nodes = []
+                    for i, (stl_file, mesh) in enumerate(zip(stl_files, meshes)):
+                        filename = os.path.basename(stl_file)
+                        
+                        part_node = Node(
+                            name=f"LSC2_Waveguide_Part{i}",
+                            geometry=Mesh(
+                                trimesh=mesh,
+                                material=Material(
+                                    refractive_index=wavN,
+                                    components=[
+                                        Absorber(coefficient=wavAbs*1.00),
+                                        Scatterer(coefficient=wavAbs*0.00)
+                                    ]
+                                )
+                            ),
+                            parent=parent_container
+                        )
+                        
+                        # Calculate relative position from reference (first part)
+                        # This preserves the spacing from the STL files
+                        relative_position = [
+                            centroids[i][0] - reference_centroid[0],
+                            centroids[i][1] - reference_centroid[1],
+                            centroids[i][2] - reference_centroid[2]
+                        ]
+                        part_node.location = relative_position
+                        
+                        part_nodes.append(part_node)
+                        
+                        bounds = mesh.bounds
+                        print(f"    Part {i} ({filename}):")
+                        print(f"      Vertices: {len(mesh.vertices)}")
+                        print(f"      Centroid: [{centroids[i][0]:.3f}, {centroids[i][1]:.3f}, {centroids[i][2]:.3f}]")
+                        print(f"      Relative position: [{relative_position[0]:.3f}, {relative_position[1]:.3f}, {relative_position[2]:.3f}]")
+                        print(f"      Bounds: min=[{bounds[0][0]:.3f}, {bounds[0][1]:.3f}, {bounds[0][2]:.3f}]")
+                        print(f"              max=[{bounds[1][0]:.3f}, {bounds[1][1]:.3f}, {bounds[1][2]:.3f}]")
+                    
+                    return parent_container, part_nodes
+            
+            else:
+                # FILE MODE: Single STL file (backward compatible with old behavior)
+                # Try to split into disconnected components
+                mesh = trimesh.load(stl_path)
+                
+                if hasattr(mesh, 'split'):
+                    parts = mesh.split()
+                else:
+                    parts = [mesh]
+                
+                num_parts = len(parts)
+                print(f"Single file mode: Loaded {os.path.basename(stl_path)}")
+                print(f"  Found {num_parts} disconnected component(s)")
+                
+                if num_parts == 1:
+                    # Single connected mesh
+                    print("  Creating single waveguide node")
+                    waveguide = Node(
+                        name="LSC2_Waveguide",
+                        geometry=Mesh(
+                            trimesh=mesh,
+                            material=Material(
+                                refractive_index=wavN,
+                                components=[
+                                    Absorber(coefficient=wavAbs*1.00),
+                                    Scatterer(coefficient=wavAbs*0.00)
+                                ]
+                            )
+                        ),
+                        parent=parent_node
+                    )
+                    return waveguide, [waveguide]
+                
+                else:
+                    # Multiple disconnected parts in one file
+                    print(f"  Creating parent container with {num_parts} child nodes from split")
+                    
+                    parent_container = Node(
+                        name="LSC2_Waveguide_Parent",
+                        parent=parent_node
+                    )
+                    
+                    part_nodes = []
+                    for i, part in enumerate(parts):
+                        part_node = Node(
+                            name=f"LSC2_Waveguide_Part{i}",
+                            geometry=Mesh(
+                                trimesh=part,
+                                material=Material(
+                                    refractive_index=wavN,
+                                    components=[
+                                        Absorber(coefficient=wavAbs*1.00),
+                                        Scatterer(coefficient=wavAbs*0.00)
+                                    ]
+                                )
+                            ),
+                            parent=parent_container
+                        )
+                        part_nodes.append(part_node)
+                        
+                        bounds = part.bounds
+                        centroid = part.centroid
+                        print(f"    Part {i}: vertices={len(part.vertices)}")
+                        print(f"      Centroid: [{centroid[0]:.3f}, {centroid[1]:.3f}, {centroid[2]:.3f}]")
+                    
+                    return parent_container, part_nodes
             
 
         def addWaveguideSurfaces(LSC2):
@@ -1361,7 +1565,7 @@ class testingQT(QWidget):
             if zpos_zbs:  # Check if there are absorbed rays
                 plt.hist(zpos_zbs, bins=50, range=(0, 17), alpha=0.7, color='blue', edgecolor='black')
                 plt.title(f'Absorbed rays distribution along Z-axis ({len(absorbed_rays)} rays)')
-                plt.xlabel('Z position (cm)')
+                plt.xlabel('Z position (mm)')
                 plt.ylabel('Number of absorbed rays')
                 plt.grid(True, alpha=0.3)
                 plt.xlim(0, 17)
@@ -1370,14 +1574,14 @@ class testingQT(QWidget):
                 z_mean = np.mean(zpos_zbs)
                 z_std = np.std(zpos_zbs)
                 plt.text(0.02, 0.98, 
-                        f'Mean Z: {z_mean:.2f} cm\nStd Z: {z_std:.2f} cm\nTotal: {len(zpos_zbs)} rays', 
+                        f'Mean Z: {z_mean:.2f} mm\nStd Z: {z_std:.2f} mm\nTotal: {len(zpos_zbs)} rays', 
                         transform=plt.gca().transAxes, verticalalignment='top',
                         bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
             else:
                 plt.text(0.5, 0.5, 'No rays absorbed', transform=plt.gca().transAxes, 
                         ha='center', va='center', fontsize=14)
                 plt.title('Absorbed rays distribution along Z-axis (No absorption)')
-                plt.xlabel('Z position (cm)')
+                plt.xlabel('Z position (mm)')
                 plt.ylabel('Number of absorbed rays')
                 plt.xlim(0, 17)
 
@@ -1390,7 +1594,7 @@ class testingQT(QWidget):
             if ypos_abs:  # Check if there are absorbed rays
                 plt.hist(ypos_abs, bins=50, range=(-3, 3), alpha=0.7, color='green', edgecolor='black')
                 plt.title(f'Absorbed rays distribution along Y-axis ({len(absorbed_rays)} rays)')
-                plt.xlabel('Y position (cm)')
+                plt.xlabel('Y position (mm)')
                 plt.ylabel('Number of absorbed rays')
                 plt.grid(True, alpha=0.3)
                 
@@ -1398,14 +1602,14 @@ class testingQT(QWidget):
                 y_mean = np.mean(ypos_abs)
                 y_std = np.std(ypos_abs)
                 plt.text(0.02, 0.98, 
-                        f'Mean Y: {y_mean:.2f} cm\nStd Y: {y_std:.2f} cm\nTotal: {len(ypos_abs)} rays', 
+                        f'Mean Y: {y_mean:.2f} mm\nStd Y: {y_std:.2f} mm\nTotal: {len(ypos_abs)} rays', 
                         transform=plt.gca().transAxes, verticalalignment='top',
                         bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
             else:
                 plt.text(0.5, 0.5, 'No rays absorbed', transform=plt.gca().transAxes, 
                         ha='center', va='center', fontsize=14)
                 plt.title('Absorbed rays distribution along Y-axis (No absorption)')
-                plt.xlabel('Y position (cm)')
+                plt.xlabel('Y position (mm)')
                 plt.ylabel('Number of absorbed rays')
                 plt.xlim(-0.6, 0.6)
 
@@ -1417,7 +1621,7 @@ class testingQT(QWidget):
             if xpos_abs:  # Check if there are absorbed rays
                 plt.hist(xpos_abs, bins=50, range=(-2.5, 2.5), alpha=0.7, color='red', edgecolor='black')
                 plt.title(f'Absorbed rays distribution along X-axis ({len(absorbed_rays)} rays)')
-                plt.xlabel('X position (cm)')
+                plt.xlabel('X position (mm)')
                 plt.ylabel('Number of absorbed rays')
                 plt.grid(True, alpha=0.3)
                 plt.xlim(-2.5, 2.5)
@@ -1426,14 +1630,14 @@ class testingQT(QWidget):
                 x_mean = np.mean(xpos_abs)
                 x_std = np.std(xpos_abs)
                 plt.text(0.02, 0.98, 
-                        f'Mean X: {x_mean:.2f} cm\nStd X: {x_std:.2f} cm\nTotal: {len(xpos_abs)} rays', 
+                        f'Mean X: {x_mean:.2f} mm\nStd X: {x_std:.2f} mm\nTotal: {len(xpos_abs)} rays', 
                         transform=plt.gca().transAxes, verticalalignment='top',
                         bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
             else:
                 plt.text(0.5, 0.5, 'No rays absorbed', transform=plt.gca().transAxes, 
                         ha='center', va='center', fontsize=14)
                 plt.title('Absorbed rays distribution along X-axis (No absorption)')
-                plt.xlabel('X position (cm)')
+                plt.xlabel('X position (mm)')
                 plt.ylabel('Number of absorbed rays')
                 plt.xlim(-2.5, 2.5)
 
@@ -1441,19 +1645,129 @@ class testingQT(QWidget):
                 plt.savefig(self.saveFolder+"/"+"absorption_x_histogram.png", dpi=figDPI)
             plt.pause(0.00001)
 
-            # REPLACE THIS SECTION (lines 1418-1512):
+            if(self.saveFolder!=''):
+                plt.savefig(self.saveFolder+"/"+"absorption_x_histogram.png", dpi=figDPI)
+            plt.pause(0.00001)
+
+            # ========== ADD THIS SECTION: SAVE RAW DATA ==========
+            if self.saveFolder != '':
+                print("\n=== SAVING RAW DATA ===")
+                
+                # 1. Save absorbed ray positions as CSV
+                if len(absorbed_rays) > 0:
+                    absorbed_data = pd.DataFrame({
+                        'x_position': xpos_abs,
+                        'y_position': ypos_abs,
+                        'z_position': zpos_zbs,
+                        'wavelength': absorbed_wavs,
+                        'direction_x': [d[0] for d in direction_abs],
+                        'direction_y': [d[1] for d in direction_abs],
+                        'direction_z': [d[2] for d in direction_abs]
+                    })
+                    absorbed_csv_path = f"{self.saveFolder}/absorbed_rays_raw_data.csv"
+                    absorbed_data.to_csv(absorbed_csv_path, index=False)
+                    print(f"Saved absorbed ray positions to: {absorbed_csv_path}")
+                
+                # 2. Save YZ heatmap histogram data
+                if absorbed_wavs:
+                    # Recreate histogram (you already have counts, y_edges, z_edges from line ~1661)
+                    # But recalculate here for clarity
+                    counts_yz, y_edges_yz, z_edges_yz = np.histogram2d(
+                        np.array(ypos_abs), np.array(zpos_zbs), bins=50
+                    )
+                    
+                    # Save bin counts as CSV
+                    heatmap_df = pd.DataFrame(counts_yz.T)  # Transpose to match plot orientation
+                    heatmap_csv_path = f"{self.saveFolder}/absorption_heatmap_yz_counts.csv"
+                    heatmap_df.to_csv(heatmap_csv_path, index=False, header=False)
+                    
+                    # Save bin edges separately
+                    edges_data = {
+                        'y_bin_edges': y_edges_yz,
+                        'z_bin_edges': z_edges_yz
+                    }
+                    edges_df = pd.DataFrame(dict([(k, pd.Series(v)) for k, v in edges_data.items()]))
+                    edges_csv_path = f"{self.saveFolder}/absorption_heatmap_yz_edges.csv"
+                    edges_df.to_csv(edges_csv_path, index=False)
+                    
+                    print(f"Saved YZ heatmap bin counts to: {heatmap_csv_path}")
+                    print(f"Saved YZ heatmap bin edges to: {edges_csv_path}")
+                
+                # 3. Save 1D histogram data (Z, Y, X directions)
+                if len(zpos_zbs) > 0:
+                    # Z-axis histogram
+                    counts_z, bins_z = np.histogram(zpos_zbs, bins=50, range=(0, 17))
+                    z_hist_df = pd.DataFrame({
+                        'bin_center': (bins_z[:-1] + bins_z[1:]) / 2,
+                        'count': counts_z
+                    })
+                    z_hist_df.to_csv(f"{self.saveFolder}/absorption_z_histogram_data.csv", index=False)
+                    
+                    # Y-axis histogram
+                    counts_y, bins_y = np.histogram(ypos_abs, bins=50, range=(-3, 3))
+                    y_hist_df = pd.DataFrame({
+                        'bin_center': (bins_y[:-1] + bins_y[1:]) / 2,
+                        'count': counts_y
+                    })
+                    y_hist_df.to_csv(f"{self.saveFolder}/absorption_y_histogram_data.csv", index=False)
+                    
+                    # X-axis histogram
+                    counts_x, bins_x = np.histogram(xpos_abs, bins=50, range=(-2.5, 2.5))
+                    x_hist_df = pd.DataFrame({
+                        'bin_center': (bins_x[:-1] + bins_x[1:]) / 2,
+                        'count': counts_x
+                    })
+                    x_hist_df.to_csv(f"{self.saveFolder}/absorption_x_histogram_data.csv", index=False)
+                    
+                    print("Saved 1D histogram data for X, Y, Z axes")
+                
+                # 4. Save angular distribution data
+                if len(direction_abs) > 0:
+                    # Azimuthal angles
+                    azimuthal_angles = []
+                    for direction in direction_abs:
+                        azimuthal_angle = np.degrees(np.arctan2(direction[1], direction[0]))
+                        if azimuthal_angle < 0:
+                            azimuthal_angle += 360
+                        azimuthal_angles.append(azimuthal_angle)
+                    
+                    counts_az, bins_az = np.histogram(azimuthal_angles, bins=36, range=(0, 360))
+                    az_hist_df = pd.DataFrame({
+                        'bin_center': (bins_az[:-1] + bins_az[1:]) / 2,
+                        'count': counts_az
+                    })
+                    az_hist_df.to_csv(f"{self.saveFolder}/absorption_azimuthal_histogram_data.csv", index=False)
+                    
+                    # Polar angles
+                    polar_angles = []
+                    for direction in direction_abs:
+                        cos_theta = np.clip(abs(direction[2]), 0, 1)
+                        theta_deg = np.degrees(np.arccos(cos_theta))
+                        polar_angles.append(theta_deg)
+                    
+                    counts_pol, bins_pol = np.histogram(polar_angles, bins=90, range=(0, 90))
+                    pol_hist_df = pd.DataFrame({
+                        'bin_center': (bins_pol[:-1] + bins_pol[1:]) / 2,
+                        'count': counts_pol
+                    })
+                    pol_hist_df.to_csv(f"{self.saveFolder}/absorption_polar_histogram_data.csv", index=False)
+                    
+                    print("Saved angular distribution data")
+                
+                print("=== RAW DATA SAVE COMPLETE ===\n")
+
             plt.figure(1, clear=True)
             
-            # Plot absorbed rays as contour plot on YZ plane
+            # Plot absorbed rays as heatmap on YZ plane
             if absorbed_wavs:  # Only plot if there are absorbed rays
                 # Extract Y and Z positions for absorbed rays
                 ypos_abs_array = np.array(ypos_abs)
                 zpos_abs_array = np.array(zpos_zbs)
                 
-                # Create 2D histogram with FULL range (no cropping to effective data range)
+                # Create 2D histogram - THIS IS YOUR GRID
                 counts, y_edges, z_edges = np.histogram2d(
                     ypos_abs_array, zpos_abs_array, 
-                    bins=50  # Fixed resolution
+                    bins=50  # Adjust for coarser/finer grid
                 )
                 
                 # Calculate effective absorbed area (36.8% threshold)
@@ -1467,7 +1781,7 @@ class testingQT(QWidget):
                 # Calculate bin area
                 y_bin_width = (y_edges[1] - y_edges[0])
                 z_bin_width = (z_edges[1] - z_edges[0])
-                bin_area = y_bin_width * z_bin_width  # cm²
+                bin_area = y_bin_width * z_bin_width  # mm²
                 
                 # Calculate effective absorbed area
                 effective_absorbed_area = effective_bins * bin_area
@@ -1484,37 +1798,52 @@ class testingQT(QWidget):
                 print(f"\n=== ABSORPTION AREA ANALYSIS ===")
                 print(f"Maximum absorption density: {max_count} rays/bin")
                 print(f"36.8% threshold: {threshold:.1f} rays/bin")
-                print(f"Effective absorbed area: {effective_absorbed_area:.3f} cm²")
-                print(f"Total absorbed area: {total_absorbed_area:.3f} cm²")
+                print(f"Effective absorbed area: {effective_absorbed_area:.3f} mm²")
+                print(f"Total absorbed area: {total_absorbed_area:.3f} mm²")
                 print(f"Area efficiency: {area_efficiency:.1f}%")
-                print(f"Bin size: {y_bin_width:.4f} × {z_bin_width:.4f} cm")
+                print(f"Bin size: {y_bin_width:.4f} × {z_bin_width:.4f} mm")
                 print(f"Grid resolution: {len(y_edges)-1} × {len(z_edges)-1} bins")
                 
-                # Create meshgrid for contour plot
-                Y, Z = np.meshgrid(y_edges[:-1], z_edges[:-1])
+                # SIMPLE PIXELATED HEATMAP - NO INTERPOLATION
+                # Use imshow with extent to map bins to axes correctly
+                plt.imshow(
+                    counts.T,  # Transpose to match Y (horizontal) and Z (vertical)
+                    origin='lower',  # Put (0,0) at bottom-left
+                    extent=[y_edges[0], y_edges[-1], z_edges[0], z_edges[-1]],  # Map bins to real coordinates
+                    cmap='viridis',  # Color map
+                    aspect='auto',  # Adjust aspect ratio to fill plot
+                    interpolation='nearest'  # NO interpolation - sharp pixels
+                )
                 
-                # Create contour plot
-                contour = plt.contourf(Y, Z, counts.T, levels=20, cmap='viridis')
-                plt.colorbar(contour, label='Number of absorbed rays')
+                # Add colorbar
+                cbar = plt.colorbar(label='Number of absorbed rays')
                 
-                # Add contour lines for better visualization
-                contour_lines = plt.contour(Y, Z, counts.T, levels=10, colors='white', alpha=0.6, linewidths=0.5)
-                plt.clabel(contour_lines, inline=True, fontsize=8, fmt='%d')
-                
-                # Add special contour line for 36.8% threshold
+                # Optional: Add contour line for 36.8% threshold
                 if threshold > 0:
-                    threshold_contour = plt.contour(Y, Z, counts.T, levels=[threshold], colors='red', linewidths=2)
+                    # Create meshgrid for contour (centers of bins)
+                    Y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+                    Z_centers = (z_edges[:-1] + z_edges[1:]) / 2
+                    Y, Z = np.meshgrid(Y_centers, Z_centers)
+                    
+                    threshold_contour = plt.contour(
+                        Y, Z, counts.T, 
+                        levels=[threshold], 
+                        colors='red', 
+                        linewidths=2,
+                        linestyles='dashed'
+                    )
                     plt.clabel(threshold_contour, inline=True, fontsize=10, fmt='36.8%%', colors='red')
                 
                 plt.title(f'Light absorption density on YZ plane ({len(absorbed_rays)} rays absorbed)')
-                plt.xlabel('Y position (cm)')
-                plt.ylabel('Z position (cm)')
+                plt.xlabel('Y position (mm)')
+                plt.ylabel('Z position (mm)')
+                plt.grid(False)  # Turn off grid for cleaner look
                 
                 # Enhanced statistics text box with area analysis
                 absorption_percentage = (len(absorbed_rays) / numRays) * 100
                 plt.text(0.02, 0.98, 
                         f'Total rays: {numRays}\nAbsorbed: {len(absorbed_rays)}\nAbsorption: {absorption_percentage:.1f}%\n'
-                        f'Effective area: {effective_absorbed_area:.3f} cm²\nTotal area: {total_absorbed_area:.3f} cm²\n'
+                        f'Effective area: {effective_absorbed_area:.3f} mm²\nTotal area: {total_absorbed_area:.3f} mm²\n'
                         f'Area efficiency: {area_efficiency:.1f}%', 
                         transform=plt.gca().transAxes, verticalalignment='top',
                         bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
@@ -1524,24 +1853,24 @@ class testingQT(QWidget):
                     dataFile.write(f"\n=== ABSORPTION AREA ANALYSIS ===\n")
                     dataFile.write(f"Maximum absorption density\t{max_count} rays/bin\n")
                     dataFile.write(f"36.8% threshold\t{threshold:.1f} rays/bin\n")
-                    dataFile.write(f"Effective absorbed area\t{effective_absorbed_area:.3f} cm²\n")
-                    dataFile.write(f"Total absorbed area\t{total_absorbed_area:.3f} cm²\n")
+                    dataFile.write(f"Effective absorbed area\t{effective_absorbed_area:.3f} mm²\n")
+                    dataFile.write(f"Total absorbed area\t{total_absorbed_area:.3f} mm²\n")
                     dataFile.write(f"Area efficiency\t{area_efficiency:.1f}%\n")
-                    dataFile.write(f"Bin size\t{y_bin_width:.4f} × {z_bin_width:.4f} cm\n")
+                    dataFile.write(f"Bin size\t{y_bin_width:.4f} × {z_bin_width:.4f} mm\n")
                     dataFile.write(f"Grid resolution\t{len(y_edges)-1} × {len(z_edges)-1} bins\n")
                     
             else:
                 plt.text(0.5, 0.5, 'No rays absorbed', transform=plt.gca().transAxes, 
                         ha='center', va='center', fontsize=14)
                 plt.title('Light absorption density on YZ plane (No absorption detected)')
-                plt.xlabel('Y position (cm)')
-                plt.ylabel('Z position (cm)')
+                plt.xlabel('Y position (mm)')
+                plt.ylabel('Z position (mm)')
                 
                 print("\n=== ABSORPTION AREA ANALYSIS ===")
                 print("No absorption detected - cannot calculate effective area")
             
             if(self.saveFolder!=''):
-                plt.savefig(self.saveFolder+"/"+"absorption_contour_yz.png", dpi=figDPI, bbox_inches='tight')
+                plt.savefig(self.saveFolder+"/"+"absorption_heatmap_yz.png", dpi=figDPI, bbox_inches='tight')
             plt.pause(0.00001)
             
 
@@ -1865,9 +2194,9 @@ class testingQT(QWidget):
                 else:
                     nearest_neg_name = None
             
-            # Check if BOTH directions hit waveguides
-            is_pos_waveguide = nearest_pos_name in ["LSC2_Waveguide", "LSC3_Waveguide", "LSC4_Waveguide"]
-            is_neg_waveguide = nearest_neg_name in ["LSC2_Waveguide", "LSC3_Waveguide", "LSC4_Waveguide"]
+            # Check if BOTH directions hit waveguides (now includes Part0, Part1, etc.)
+            is_pos_waveguide = "Waveguide" in nearest_pos_name if nearest_pos_name else False
+            is_neg_waveguide = "Waveguide" in nearest_neg_name if nearest_neg_name else False
             
             if is_pos_waveguide and is_neg_waveguide:
                 # Ray is surrounded by waveguide material in both directions
@@ -1943,19 +2272,29 @@ class testingQT(QWidget):
                 
                 material = container.geometry.material
                 
-                # CUMULATIVE ABSORPTION: Adjust absorption check based on accumulated distance
-                # If ray has accumulated absorber distance, we need to account for that
-                effective_distance = full_distance + accumulated_absorber_distance
-                absorbed, at_distance = material.is_absorbed(ray, effective_distance)
+                # Z-DIRECTIONAL ABSORPTION: Calculate Z-component of travel distance
+                # Get the ray direction and calculate the Z-component of the full distance
+                ray_direction = ray.direction
+                z_component_fraction = abs(ray_direction[2])  # |cos(theta)| where theta is angle from Z-axis
+                z_distance = full_distance * z_component_fraction  # Project full distance onto Z-axis
                 
-                # Adjust at_distance to account for accumulated distance
-                if absorbed and at_distance > accumulated_absorber_distance:
+                # CUMULATIVE ABSORPTION: Adjust absorption check based on Z-distance only
+                # If ray has accumulated absorber distance, we need to account for that
+                effective_z_distance = z_distance + accumulated_absorber_distance
+                absorbed, at_z_distance = material.is_absorbed(ray, effective_z_distance)
+                
+                # Adjust at_z_distance to account for accumulated distance
+                if absorbed and at_z_distance > accumulated_absorber_distance:
                     # Absorption occurs beyond the accumulated distance
-                    at_distance = at_distance - accumulated_absorber_distance
+                    at_z_distance = at_z_distance - accumulated_absorber_distance
+                    # Convert Z-distance back to full 3D distance for propagation
+                    at_distance = at_z_distance / z_component_fraction if z_component_fraction > 0 else full_distance
                 elif absorbed:
                     # Absorption should have occurred in the accumulated segment
                     # This means ray is absorbed immediately
                     at_distance = 0.0
+                else:
+                    at_distance = full_distance
                 
                 if absorbed and at_distance < full_distance:
                     # Store ray state before propagation
@@ -1965,11 +2304,25 @@ class testingQT(QWidget):
                     # SAFETY CHECK: Verify which object we're actually in
                     actual_container_name = verify_actual_container(scene, ray_after_absorption.position)
                     
-                    # If absorption point is inside a different waveguide, we need to handle the interface properly
-                    if actual_container_name in ["LSC2_Waveguide", "LSC3_Waveguide", "LSC4_Waveguide"]:
-                        # Find the waveguide node
+                    # If absorption point is inside a waveguide (including multi-part waveguides)
+                    # we need to handle the interface properly
+                    if actual_container_name and "Waveguide" in actual_container_name:
+                        # Find the waveguide node by searching all children
                         waveguide_node = None
+                        
+                        # Search in world's direct children
                         for node in scene.root.children:
+                            if node.name == actual_container_name:
+                                waveguide_node = node
+                                break
+                            # Also check if it's a child of LSC or a parent container
+                            if hasattr(node, 'children'):
+                                for child in node.children:
+                                    if child.name == actual_container_name:
+                                        waveguide_node = child
+                                        break
+                                if waveguide_node:
+                                    break
                             if node.name == actual_container_name:
                                 waveguide_node = node
                                 break
@@ -1988,13 +2341,18 @@ class testingQT(QWidget):
                                     break
                             
                             if waveguide_intersection is not None:
-                                # CRITICAL: Accumulate the absorber transit distance
+                                # CRITICAL: Accumulate the Z-component of absorber transit distance
                                 # This distance would have contributed to absorption probability
                                 # We need to account for it in future absorption checks
                                 interface_distance = waveguide_intersection.distance
                                 
-                                # Add this transit distance to accumulated absorber path
-                                accumulated_absorber_distance += interface_distance
+                                # Calculate Z-component of the transit distance
+                                ray_direction_before = ray_before_absorption.direction
+                                z_component_fraction_transit = abs(ray_direction_before[2])
+                                z_interface_distance = interface_distance * z_component_fraction_transit
+                                
+                                # Add this Z-transit distance to accumulated absorber path
+                                accumulated_absorber_distance += z_interface_distance
                                 
                                 # Propagate to the waveguide interface (Point G)
                                 ray = ray_before_absorption.propagate(interface_distance)
@@ -2170,21 +2528,41 @@ class testingQT(QWidget):
         
         LSC = addBottomSurf(LSC, bottomMir, bottomScat)
 
-        # Create second LSC (waveguide)
+        # Create second LSC (waveguide) with automatic multi-part splitting
         if enableSecondLSC:
+            waveguide_parent = None
+            waveguide_parts = []
+            
             if(LSC2shape == 'Box'):
                 LSC2 = createBoxLSC(LSC2dimX, LSC2dimY, LSC2dimZ, wavAbs2, wavN2)
+                LSC2.location = [offsetX, offsetY, offsetZ]
+                LSC2.name = "LSC2_Waveguide"
+                waveguide_parts = [LSC2]
             elif(LSC2shape == 'Cylinder'):
                 LSC2 = createCylLSC(LSC2dimX, LSC2dimZ, wavAbs2, wavN2)
+                LSC2.location = [offsetX, offsetY, offsetZ]
+                LSC2.name = "LSC2_Waveguide"
+                waveguide_parts = [LSC2]
             elif(LSC2shape == 'Sphere'):
                 LSC2 = createSphLSC(LSC2dimX, wavAbs2, wavN2)
+                LSC2.location = [offsetX, offsetY, offsetZ]
+                LSC2.name = "LSC2_Waveguide"
+                waveguide_parts = [LSC2]
             elif(LSC2shape == 'Import Mesh'):
-                LSC2 = createMeshLSC(self, wavAbs2, wavN2, self.STLfile2)
+                # Use the new multi-part mesh function
+                # This automatically splits disconnected parts into separate nodes
+                waveguide_parent, waveguide_parts = createMultiPartMeshLSC(
+                    self, wavAbs2, wavN2, self.STLfile2, world
+                )
+                
+                # Position the parent container (all parts move together)
+                waveguide_parent.location = [offsetX, offsetY, offsetZ]
+                
+                # For backward compatibility, set LSC2 to the parent
+                LSC2 = waveguide_parent
+                
+                print(f"Created {len(waveguide_parts)} waveguide part(s)")
             
-            # Position the second LSC
-            LSC2.location = [offsetX, offsetY, offsetZ]
-            LSC2.name = "LSC2_Waveguide"
-
             # CREATE DETECTOR HERE - AFTER WORLD AND LSCs ARE CREATED
             if self.enableDetector.isChecked():
                 # Get detector parameters
@@ -2244,56 +2622,15 @@ class testingQT(QWidget):
                 self.current_detector = None
                 self.detector_initial_count = 0
             
-            # Add lumophore to second LSC if needed
+            # Add lumophore to waveguide parts if needed
             if(LumType2 == 'Lumogen Red'):
-                LSC2, x2, abs_spec2, ems_spec2 = addLR305(LSC2, LumConc2, LumPLQY2)
+                # Apply lumophore to all waveguide parts
+                for part in waveguide_parts:
+                    part, x2, abs_spec2, ems_spec2 = addLR305(part, LumConc2, LumPLQY2)
             
-            # Configure second LSC surfaces (waveguide properties)
-            LSC2 = addWaveguideSurfaces(LSC2)
-            
-            # Create LSC3 (third waveguide - same properties as LSC2) if enabled
-            if self.enableLSC3 and self.enableLSC3.isChecked():
-                if(LSC2shape == 'Box'):
-                    LSC3 = createBoxLSC(LSC2dimX, LSC2dimY, LSC2dimZ, wavAbs2, wavN2)
-                elif(LSC2shape == 'Cylinder'):
-                    LSC3 = createCylLSC(LSC2dimX, LSC2dimZ, wavAbs2, wavN2)
-                elif(LSC2shape == 'Sphere'):
-                    LSC3 = createSphLSC(LSC2dimX, wavAbs2, wavN2)
-                elif(LSC2shape == 'Import Mesh'):
-                    LSC3 = createMeshLSC(self, wavAbs2, wavN2, self.STLfile2)
-                
-                # Position LSC3 (using offset3 parameters)
-                offsetX3 = float(self.lsc3_offsetX.text())
-                offsetY3 = float(self.lsc3_offsetY.text())
-                offsetZ3 = float(self.lsc3_offsetZ.text())
-                LSC3.location = [offsetX3, offsetY3, offsetZ3]
-                LSC3.name = "LSC3_Waveguide"
-                
-                if(LumType2 == 'Lumogen Red'):
-                    LSC3, _, _, _ = addLR305(LSC3, LumConc2, LumPLQY2)
-                LSC3 = addWaveguideSurfaces(LSC3)
-            
-            # Create LSC4 (fourth waveguide - same properties as LSC2) if enabled
-            if self.enableLSC4 and self.enableLSC4.isChecked():
-                if(LSC2shape == 'Box'):
-                    LSC4 = createBoxLSC(LSC2dimX, LSC2dimY, LSC2dimZ, wavAbs2, wavN2)
-                elif(LSC2shape == 'Cylinder'):
-                    LSC4 = createCylLSC(LSC2dimX, LSC2dimZ, wavAbs2, wavN2)
-                elif(LSC2shape == 'Sphere'):
-                    LSC4 = createSphLSC(LSC2dimX, wavAbs2, wavN2)
-                elif(LSC2shape == 'Import Mesh'):
-                    LSC4 = createMeshLSC(self, wavAbs2, wavN2, self.STLfile2)
-                
-                # Position LSC4 (using offset4 parameters)
-                offsetX4 = float(self.lsc4_offsetX.text())
-                offsetY4 = float(self.lsc4_offsetY.text())
-                offsetZ4 = float(self.lsc4_offsetZ.text())
-                LSC4.location = [offsetX4, offsetY4, offsetZ4]
-                LSC4.name = "LSC4_Waveguide"
-                
-                if(LumType2 == 'Lumogen Red'):
-                    LSC4, _, _, _ = addLR305(LSC4, LumConc2, LumPLQY2)
-                LSC4 = addWaveguideSurfaces(LSC4)
+            # Configure waveguide surfaces for all parts
+            for part in waveguide_parts:
+                part = addWaveguideSurfaces(part)
         
         wavelengths, intensity, light = initLight(lightWavMin, lightWavMax)
         if(lightPattern == 'Rectangle Mask'):
