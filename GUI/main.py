@@ -2019,6 +2019,86 @@ class testingQT(QWidget):
         # Apply the fix
         photon_tracer.find_container = corrected_find_container
 
+        def corrected_next_hit(scene, ray):
+            """
+            Container-aware next_hit that prioritizes current container's surfaces.
+            
+            When ray is inside a waveguide embedded in absorber:
+            - Should hit waveguide's own surface first (for TIR, refraction out)
+            - Should NOT prematurely target other nearby waveguides' surfaces
+            
+            This prevents the "attraction" problem where nearby waveguides pull rays out.
+            """
+            # Get all intersections
+            intersections = scene.intersections(ray.position, ray.direction)
+            
+            # Remove on-surface intersections
+            from pvtrace.algorithm.photon_tracer import close_to_zero
+            intersections = [x for x in intersections if not close_to_zero(x.distance)]
+            
+            # Convert to world coordinates
+            intersections = [x.to(scene.root) for x in intersections]
+            
+            if len(intersections) == 0:
+                return None
+            
+            # Find current container
+            container = corrected_find_container(intersections)
+            
+            # Single intersection case
+            if len(intersections) == 1:
+                hit = intersections[0]
+                hit_node = hit.hit
+                return hit_node, (hit_node, None), hit.point, hit.distance
+            
+            # CRITICAL FIX: Filter intersections to prioritize container's own surfaces
+            # When inside a waveguide, we should hit the waveguide's surface first,
+            # NOT another waveguide's surface even if it's closer
+            
+            # Separate container surfaces from other surfaces
+            container_intersections = []
+            other_intersections = []
+            
+            for intersection in intersections:
+                if intersection.hit == container:
+                    # This is the container's own surface
+                    container_intersections.append(intersection)
+                else:
+                    # This is another object's surface
+                    other_intersections.append(intersection)
+            
+            # If we have container surfaces, ALWAYS prioritize them
+            # This prevents rays from "escaping" to nearby objects
+            if len(container_intersections) > 0:
+                # Use closest container surface
+                hit = container_intersections[0]
+                hit_node = hit.hit
+                point = hit.point
+                distance = hit.distance
+                
+                # Adjacent is the next container we'll enter
+                if len(other_intersections) > 0:
+                    adjacent = other_intersections[0].hit
+                else:
+                    adjacent = scene.root  # Exit to world
+                
+                return hit_node, (container, adjacent), point, distance
+            
+            # If no container surfaces (shouldn't happen), fall back to original logic
+            hit = intersections[0]
+            hit_node = hit.hit
+            point = hit.point
+            distance = hit.distance
+            
+            if container == hit_node:
+                adjacent = intersections[1].hit if len(intersections) > 1 else None
+            else:
+                adjacent = hit_node
+            
+            return hit_node, (container, adjacent), point, distance
+
+
+
         def verify_actual_container(scene, ray_position):
             """
             Enhanced container check: cast rays in both +X and -X directions.
@@ -2116,13 +2196,14 @@ class testingQT(QWidget):
                     history.append((ray.propagate(full_distance), (None,None,None), Event.EXIT))
                     break
 
-                # SIMPLIFIED FIX: Force adjacent to be LSC when ray is inside ANY waveguide
-                # Since all waveguides are embedded in LSC absorber and well-separated,
-                # any waveguide can only exit to LSC material
+                # BRUTAL FIX: Force adjacent to be LSC when exiting any waveguide
+                # Since waveguides are embedded in LSC and separated from each other,
+                # any waveguide exit should interact with LSC material, not other waveguides
                 corrected_adjacent = adjacent
                 
-                if "Waveguide" in container.name:
-                    # Ray is inside ANY waveguide → adjacent must be LSC absorber
+                if "Waveguide" in container.name and container.name == hit.name:
+                    # Ray is inside a waveguide hitting its own surface (exiting)
+                    # Force adjacent to be the LSC absorber (parent)
                     for node in scene.root.children:
                         if node.name == "LSC":
                             corrected_adjacent = node
@@ -2330,6 +2411,7 @@ class testingQT(QWidget):
 
         # Apply the fixes
         photon_tracer.find_container = corrected_find_container
+        photon_tracer.next_hit = corrected_next_hit
         photon_tracer.follow = corrected_follow
 
         if(enclosingBox):
