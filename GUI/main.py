@@ -13,7 +13,7 @@ from PySide2.QtUiTools import QUiLoader
 from pvtrace import *
 #from pvtrace.geometry.utils import EPS_ZERO
 from pvtrace.light.utils import wavelength_to_rgb
-from pvtrace.material.utils import lambertian, isotropic
+from pvtrace.material.utils import lambertian, isotropic, lambertian_with_fresnel
 from pvtrace.light.event import Event
 import time
 import functools
@@ -623,7 +623,7 @@ class testingQT(QWidget):
                         centroids.append(mesh.centroid)
                     
                     # Calculate the reference position (centroid of first part)
-                    reference_centroid = centroids[0]
+                    reference_centroid = np.mean(centroids, axis=0)  # Mean of all parts
                     print(f"  Reference centroid (Part 0): [{reference_centroid[0]:.3f}, {reference_centroid[1]:.3f}, {reference_centroid[2]:.3f}]")
                     
                     # Create parent container (no geometry, just for organization)
@@ -939,28 +939,34 @@ class testingQT(QWidget):
             light.light.direction = functools.partial(lambertian, np.radians(lightDiv))
             return light
         
-        # Add this after loading your direction data (around line 758)
-        direction_data_list = np.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\pvtrace-master\detected_ray_directions_LiNbO3_trapezium.npy")
-
-        def custom_direction_sampler():
-            """Sample a random direction from the loaded data"""
-            if len(direction_data_list) == 0:
-                # Fallback to default lambertian if no data
-                return lambertian(np.radians(lightDiv))
-            
-            # Randomly select one direction from the loaded data
-            random_index = np.random.randint(0, len(direction_data_list))
-            direction = direction_data_list[random_index]
-            
-            # Normalize the direction vector (ensure it's unit length)
-            direction = direction / np.linalg.norm(direction)
-            
-            return tuple(direction)
-        
-        def addCustomDirection(light):
-            """Use custom direction sampler for the light source"""
-            light.light.direction = custom_direction_sampler
+        def addRealLambertian(light):
+            # Assign the function itself (not the result of calling it)
+            # Each time light emits, it will call lambertian_with_fresnel() to get a new direction
+            light.light.direction = lambda: lambertian_with_fresnel(n1=1.6, n2=1.815)
             return light
+        
+        # # Add this after loading your direction data (around line 758)
+        # direction_data_list = np.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\pvtrace-master\detected_ray_directions_LiNbO3_trapezium.npy")
+
+        # def custom_direction_sampler():
+        #     """Sample a random direction from the loaded data"""
+        #     if len(direction_data_list) == 0:
+        #         # Fallback to default lambertian if no data
+        #         return lambertian(np.radians(lightDiv))
+            
+        #     # Randomly select one direction from the loaded data
+        #     random_index = np.random.randint(0, len(direction_data_list))
+        #     direction = direction_data_list[random_index]
+            
+        #     # Normalize the direction vector (ensure it's unit length)
+        #     direction = direction / np.linalg.norm(direction)
+            
+        #     return tuple(direction)
+        
+        # def addCustomDirection(light):
+        #     """Use custom direction sampler for the light source"""
+        #     light.light.direction = custom_direction_sampler
+        #     return light
 
         def doRayTracing(numRays, convThres, showSim, use_parallel=True):
             """Modified to support both parallel and sequential processing"""
@@ -1565,12 +1571,12 @@ class testingQT(QWidget):
 
             plt.figure(9, clear=True)
             if xpos_abs:  # Check if there are absorbed rays
-                plt.hist(xpos_abs, bins=50, range=(-2.5, 2.5), alpha=0.7, color='red', edgecolor='black')
+                plt.hist(xpos_abs, bins=50, range=(-3, 3), alpha=0.7, color='red', edgecolor='black')
                 plt.title(f'Absorbed rays distribution along X-axis ({len(absorbed_rays)} rays)')
                 plt.xlabel('X position (mm)')
                 plt.ylabel('Number of absorbed rays')
                 plt.grid(True, alpha=0.3)
-                plt.xlim(-2.5, 2.5)
+                plt.xlim(-3, 3)
                 
                 # Add statistics text
                 x_mean = np.mean(xpos_abs)
@@ -1718,7 +1724,7 @@ class testingQT(QWidget):
                 
                 # Calculate effective absorbed area (36.8% threshold)
                 max_count = np.max(counts)
-                threshold = max_count * 0.368  # 36.8% of maximum (1/e criterion)
+                threshold = max_count * 0.05  # 10% of maximum (adjustable criterion)
                 
                 # Find bins that exceed the threshold
                 effective_mask = counts >= threshold
@@ -1743,7 +1749,7 @@ class testingQT(QWidget):
                 # PRINT RESULTS
                 print(f"\n=== ABSORPTION AREA ANALYSIS ===")
                 print(f"Maximum absorption density: {max_count} rays/bin")
-                print(f"36.8% threshold: {threshold:.1f} rays/bin")
+                print(f"10% threshold: {threshold:.1f} rays/bin")
                 print(f"Effective absorbed area: {effective_absorbed_area:.3f} mm²")
                 print(f"Total absorbed area: {total_absorbed_area:.3f} mm²")
                 print(f"Area efficiency: {area_efficiency:.1f}%")
@@ -1764,7 +1770,7 @@ class testingQT(QWidget):
                 # Add colorbar
                 cbar = plt.colorbar(label='Number of absorbed rays')
                 
-                # Optional: Add contour line for 36.8% threshold
+                # Optional: Add contour line for 10% threshold
                 if threshold > 0:
                     # Create meshgrid for contour (centers of bins)
                     Y_centers = (y_edges[:-1] + y_edges[1:]) / 2
@@ -1778,7 +1784,7 @@ class testingQT(QWidget):
                         linewidths=2,
                         linestyles='dashed'
                     )
-                    plt.clabel(threshold_contour, inline=True, fontsize=10, fmt='36.8%%', colors='red')
+                    plt.clabel(threshold_contour, inline=True, fontsize=10, fmt='10%%', colors='red')
                 
                 plt.title(f'Light absorption density on YZ plane ({len(absorbed_rays)} rays absorbed)')
                 plt.xlabel('Y position (mm)')
@@ -1798,7 +1804,7 @@ class testingQT(QWidget):
                 if dataFile:
                     dataFile.write(f"\n=== ABSORPTION AREA ANALYSIS ===\n")
                     dataFile.write(f"Maximum absorption density\t{max_count} rays/bin\n")
-                    dataFile.write(f"36.8% threshold\t{threshold:.1f} rays/bin\n")
+                    dataFile.write(f"10% threshold\t{threshold:.1f} rays/bin\n")
                     dataFile.write(f"Effective absorbed area\t{effective_absorbed_area:.3f} mm²\n")
                     dataFile.write(f"Total absorbed area\t{total_absorbed_area:.3f} mm²\n")
                     dataFile.write(f"Area efficiency\t{area_efficiency:.1f}%\n")
@@ -2593,6 +2599,8 @@ class testingQT(QWidget):
             light = addLightDiv(light, lightDiv)
         if lightDiv == 0:
             light = addStraightRays(light)  # Straight rays for lightDiv = 0
+        if lightDiv == 233:
+            light = addRealLambertian(light) # Lambertian with Fresnel for special case
             
         start_t = time.time()
 

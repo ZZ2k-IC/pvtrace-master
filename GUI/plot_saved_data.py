@@ -10,8 +10,11 @@ import matplotlib.pyplot as plt
 from pathlib import Path
 import sys
 
+
+path = r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\RESULTS\doublespikes"
 # ========== CONFIGURATION ==========
-THRESHOLD_PERCENTAGE = 0.1  # 36.8% (1/e criterion) - Change this value as needed
+THRESHOLD_PERCENTAGE = 0.13  # Lower threshold (e.g., 0.1 = 10% of max)
+CAP_THRESHOLD_PERCENTAGE = 0.45  # Upper cap threshold (e.g., 0.9 = 90% of max), set to 1.0 to disable
 HEATMAP_BINS_Y = 75  # Number of bins along Y-axis
 HEATMAP_BINS_Z = 100  # Number of bins along Z-axis
 # ===================================
@@ -20,7 +23,7 @@ Y_RANGE = (-3, 3)  # e.g., (-3, 3) to show Y from -3 to 3 mm, or None for auto
 Z_RANGE = (0, 8)  # e.g., (0, 17) to show Z from 0 to 17 mm, or None for auto
 # ===================================
 def plot_saved_data(data_folder):
-    """
+    """ 
     Read saved CSV files and generate all visualization plots
     
     Parameters:
@@ -57,7 +60,7 @@ def plot_saved_data(data_folder):
     num_rays = len(absorbed_data)
     
     # ========== FIGURE 1: YZ HEATMAP WITH CONTOUR (USING RAW DATA) ==========
-    plt.figure(1, figsize=(12, 8), clear=True)
+    plt.figure(1, figsize=(7, 12), clear=True)
     
     if len(absorbed_data) > 0:
         # Determine ranges for histogram
@@ -74,27 +77,35 @@ def plot_saved_data(data_folder):
         print(f"Y range: {y_range[0]:.3f} to {y_range[1]:.3f} mm")
         print(f"Z range: {z_range[0]:.3f} to {z_range[1]:.3f} mm")
         
-        # Create 2D histogram from raw data with specified range (Z on X-axis, Y on Y-axis)
-        counts, z_edges, y_edges = np.histogram2d(
-            zpos_abs, ypos_abs,  # SWAPPED: Z first, Y second
-            bins=[HEATMAP_BINS_Z, HEATMAP_BINS_Y],  # SWAPPED bins
-            range=[z_range, y_range]  # SWAPPED ranges
+        # Create 2D histogram from raw data with specified range (Y on X-axis, Z on Y-axis)
+        counts, y_edges, z_edges = np.histogram2d(
+            ypos_abs, zpos_abs,  # Y first, Z second
+            bins=[HEATMAP_BINS_Y, HEATMAP_BINS_Z],  # Y bins, Z bins
+            range=[y_range, z_range]  # Y range, Z range
         )
         # Calculate effective absorbed area using configurable threshold
         max_count = np.max(counts)
         threshold = max_count * THRESHOLD_PERCENTAGE
+        cap_threshold = max_count * CAP_THRESHOLD_PERCENTAGE
         
-        # Find bins that exceed the threshold
+        # Find bins that exceed the lower threshold
         effective_mask = counts >= threshold
         effective_bins = np.sum(effective_mask)
         
+        # Find bins within the valid range [threshold, cap_threshold]
+        valid_range_mask = (counts >= threshold) & (counts <= cap_threshold)
+        valid_bins = np.sum(valid_range_mask)
+        
         # Calculate bin area
-        z_bin_width = (z_edges[1] - z_edges[0])
         y_bin_width = (y_edges[1] - y_edges[0])
-        bin_area = z_bin_width * y_bin_width  # mm²
+        z_bin_width = (z_edges[1] - z_edges[0])
+        bin_area = y_bin_width * z_bin_width  # mm²
         
         # Calculate effective absorbed area
         effective_absorbed_area = effective_bins * bin_area
+        
+        # Calculate valid range absorbed area (between lower and upper thresholds)
+        valid_range_absorbed_area = valid_bins * bin_area
         
         # Calculate total area covered by any absorption
         total_mask = counts > 0
@@ -103,39 +114,74 @@ def plot_saved_data(data_folder):
         
         # Calculate area efficiency
         area_efficiency = (effective_absorbed_area / total_absorbed_area * 100) if total_absorbed_area > 0 else 0
+        valid_range_area_efficiency = (valid_range_absorbed_area / total_absorbed_area * 100) if total_absorbed_area > 0 else 0
+        
+        # Calculate number of rays within threshold region
+        rays_in_threshold = np.sum(counts[effective_mask])
+        total_rays = np.sum(counts)
+        ray_efficiency = (rays_in_threshold / total_rays * 100) if total_rays > 0 else 0
+        
+        # Calculate mean and standard deviation of bin counts within valid range [threshold, cap]
+        valid_range_bin_counts = counts[valid_range_mask]
+        mean_bin_count = np.mean(valid_range_bin_counts) if len(valid_range_bin_counts) > 0 else 0
+        std_bin_count = np.std(valid_range_bin_counts) if len(valid_range_bin_counts) > 0 else 0
+        variance_bin_count = np.var(valid_range_bin_counts) if len(valid_range_bin_counts) > 0 else 0
+        
+        # Calculate how many bins were excluded by cap
+        excluded_bins = effective_bins - valid_bins
+        excluded_rays = rays_in_threshold - np.sum(counts[valid_range_mask])
         
         # Print results
         print(f"\n=== ABSORPTION AREA ANALYSIS ===")
-        print(f"Threshold setting: {THRESHOLD_PERCENTAGE*100:.1f}%")
+        print(f"Threshold settings:")
+        print(f"  Lower threshold: {THRESHOLD_PERCENTAGE*100:.1f}% ({threshold:.1f} rays/bin)")
+        print(f"  Upper cap: {CAP_THRESHOLD_PERCENTAGE*100:.1f}% ({cap_threshold:.1f} rays/bin)")
         print(f"Maximum absorption density: {max_count} rays/bin")
-        print(f"Threshold value: {threshold:.1f} rays/bin")
-        print(f"Effective absorbed area: {effective_absorbed_area:.3f} mm²")
-        print(f"Total absorbed area: {total_absorbed_area:.3f} mm²")
-        print(f"Area efficiency: {area_efficiency:.1f}%")
-        print(f"Bin size: {z_bin_width:.4f} × {y_bin_width:.4f} mm")
-        print(f"Grid resolution: {len(z_edges)-1} × {len(y_edges)-1} bins")
+        print(f"\nArea Statistics:")
+        print(f"  Effective absorbed area (above lower threshold): {effective_absorbed_area:.3f} mm²")
+        print(f"  Valid range area (between thresholds): {valid_range_absorbed_area:.3f} mm²")
+        print(f"  Total absorbed area: {total_absorbed_area:.3f} mm²")
+        print(f"  Area efficiency (above lower threshold): {area_efficiency:.1f}%")
+        print(f"  Valid range area efficiency: {valid_range_area_efficiency:.1f}%")
+        print(f"\nRay Statistics:")
+        print(f"  Rays within threshold: {int(rays_in_threshold)} / {int(total_rays)}")
+        print(f"  Ray efficiency: {ray_efficiency:.1f}%")
+        print(f"\nThreshold Region Statistics (excluding cap outliers):")
+        print(f"  Valid bins (within cap): {valid_bins} / {effective_bins}")
+        print(f"  Excluded bins (above cap): {excluded_bins}")
+        print(f"  Excluded rays: {int(excluded_rays)}")
+        print(f"  Mean bin count: {mean_bin_count:.2f} rays/bin")
+        print(f"  Std deviation: {std_bin_count:.2f} rays/bin")
+        print(f"  Variance: {variance_bin_count:.2f} (rays/bin)²")
+        if mean_bin_count > 0:
+            print(f"  Coefficient of variation: {(std_bin_count/mean_bin_count*100):.1f}%")
+        print(f"\nGrid Details:")
+        print(f"  Bin size: {y_bin_width:.4f} × {z_bin_width:.4f} mm")
+        print(f"  Grid resolution: {len(y_edges)-1} × {len(z_edges)-1} bins")
         
-        # HEATMAP (Z on X-axis, Y on Y-axis)
+        # HEATMAP (Y on X-axis, Z on Y-axis)
         plt.imshow(
             counts.T,
             origin='lower',
-            extent=[z_edges[0], z_edges[-1], y_edges[0], y_edges[-1]],  # SWAPPED extent
+            extent=[y_edges[0], y_edges[-1], z_edges[0], z_edges[-1]],  # Y extent, Z extent
             cmap='viridis',
             aspect='equal',  # Changed from 'auto' to 'equal' for same scale
             interpolation='nearest'
         )
         
-        cbar = plt.colorbar(label='Number of absorbed rays')
+        cbar = plt.colorbar(label='Number of absorbed rays', fraction=0.046, pad=0.04)
+        cbar.ax.tick_params(labelsize=14)
+        cbar.set_label('Number of absorbed rays', fontsize=16)
         
-        # Replace the entire contour section (Z on X-axis, Y on Y-axis):
+        # Replace the entire contour section (Y on X-axis, Z on Y-axis):
         if threshold > 0:
-            Z_centers = (z_edges[:-1] + z_edges[1:]) / 2  # SWAPPED
-            Y_centers = (y_edges[:-1] + y_edges[1:]) / 2  # SWAPPED
-            Z, Y = np.meshgrid(Z_centers, Y_centers)  # SWAPPED order
+            Y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+            Z_centers = (z_edges[:-1] + z_edges[1:]) / 2
+            Y, Z = np.meshgrid(Y_centers, Z_centers)
             
             # Draw FILLED contour for threshold region (semi-transparent)
             plt.contourf(
-                Z, Y, counts.T,  # SWAPPED Z and Y
+                Y, Z, counts.T,  # Y and Z in correct order
                 levels=[threshold, max_count],
                 colors=['red'],
                 alpha=0.1  # Semi-transparent fill
@@ -143,18 +189,26 @@ def plot_saved_data(data_folder):
             
             # Draw THICK boundary line at threshold
             threshold_contour = plt.contour(
-                Z, Y, counts.T,  # SWAPPED Z and Y
+                Y, Z, counts.T,  # Y and Z in correct order
                 levels=[threshold], 
                 colors='red', 
                 linewidths=1,
                 linestyles='solid'
             )
             
-
+            # Draw cap threshold line if it's less than max_count
+            if cap_threshold < max_count:
+                cap_contour = plt.contour(
+                    Y, Z, counts.T,  # Y and Z in correct order
+                    levels=[cap_threshold], 
+                    colors='orange', 
+                    linewidths=1,
+                    linestyles='dashed'
+                )
             
-        plt.title(f'Light absorption density on ZY plane ({num_rays} rays absorbed)')
-        plt.xlabel('Z position (mm)')  # SWAPPED: Z on X-axis
-        plt.ylabel('Y position (mm)')  # SWAPPED: Y on Y-axis
+        plt.xlabel('Y position (mm)', fontsize=16)  # Y on X-axis
+        plt.ylabel('Z position (mm)', fontsize=16)  # Z on Y-axis
+        plt.tick_params(axis='both', which='major', labelsize=14)
         plt.grid(False)
         
         # Create custom legend with only two items
@@ -163,11 +217,13 @@ def plot_saved_data(data_folder):
         
         legend_elements = [
             Line2D([0], [0], color='red', linewidth=2, linestyle='solid', 
-                   label=f'Threshold line ({THRESHOLD_PERCENTAGE*100:.0f}%)'),            
+                   label=f'Lower threshold ({THRESHOLD_PERCENTAGE*100:.0f}%)'),
+            Line2D([0], [0], color='orange', linewidth=2, linestyle='dashed', 
+                   label=f'Upper cap ({CAP_THRESHOLD_PERCENTAGE*100:.0f}%)'),
         ]
         
         plt.legend(handles=legend_elements, loc='upper right', 
-                  frameon=True, fancybox=True, shadow=True)
+                  frameon=True, fancybox=True, shadow=True, fontsize=14)
     
     plt.tight_layout()
     
@@ -207,12 +263,12 @@ def plot_saved_data(data_folder):
     # ========== FIGURE 9: X-AXIS HISTOGRAM ==========
     plt.figure(9, clear=True)
     if len(xpos_abs) > 0:
-        plt.hist(xpos_abs, bins=50, range=(-2.5, 2.5), alpha=0.7, color='red', edgecolor='black')
+        plt.hist(xpos_abs, bins=50, range=(-3, 3), alpha=0.7, color='red', edgecolor='black')
         plt.title(f'Absorbed rays distribution along X-axis ({num_rays} rays)')
         plt.xlabel('X position (mm)')
         plt.ylabel('Number of absorbed rays')
         plt.grid(True, alpha=0.3)
-        plt.xlim(-2.5, 2.5)
+        plt.xlim(-3, 3)
         
         x_mean = np.mean(xpos_abs)
         x_std = np.std(xpos_abs)
@@ -281,7 +337,7 @@ if __name__ == "__main__":
         folder_path = sys.argv[1]
     else:
         # EDIT THIS PATH to point to your saved data folder
-        folder_path = r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\Big_data"
+        folder_path = path
         
         print("Usage: python plot_saved_data.py <path_to_data_folder>")
         print(f"Using default path: {folder_path}")
