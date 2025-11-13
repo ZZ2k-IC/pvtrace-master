@@ -17,20 +17,19 @@ import sys
 
 
 # ========================= CONFIGURATION =========================
-DATA_PATH_DEFAULT = r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\RESULTS\low_conc_ours"
+DATA_PATH_DEFAULT = r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\RESULTS\shirley"
 
-HEATMAP_BINS_Y = 75
-HEATMAP_BINS_Z = 100
+HEATMAP_BINS_Y = 150
+HEATMAP_BINS_Z = 200
 
 Y_RANGE = (-3, 3)   # mm
 Z_RANGE = (0, 8)    # mm
 
 # *** KEY PARAMETER: cumulative energy percentage selection ***
-ENERGY_THRESHOLD_PERCENT = 0.8   # <==== YOU CAN ADJUST THIS
+ENERGY_THRESHOLD_PERCENT = 0.735   # <==== YOU CAN ADJUST THIS
 # =================================================================
 
-
-
+gradient_max = None # Max value for gradient colormap scaling
 # ================================================================
 # Select top cumulative-energy region
 # ================================================================
@@ -232,6 +231,10 @@ def plot_saved_data(data_folder):
     dz = df["direction_z"].values
 
     counts, mask = plot_heatmap(ypos, zpos, ENERGY_THRESHOLD_PERCENT)
+    # Gradient visualization
+    plot_gradient_map(counts, y_edges=np.linspace(Y_RANGE[0], Y_RANGE[1], HEATMAP_BINS_Y+1),
+                            z_edges=np.linspace(Z_RANGE[0], Z_RANGE[1], HEATMAP_BINS_Z+1))
+
 
     # NEW: Plot energy-area curve
     plot_energy_area_curve(counts, ENERGY_THRESHOLD_PERCENT)
@@ -323,6 +326,48 @@ def plot_energy_area_curve(counts, energy_threshold):
         f"(target: {energy_threshold*100:.1f}%)\n"
         f"  Number of bins in effective region: {N_eff}"
     )
+# ================================================================
+# Gradient Map (showing spatial uniformity variation)
+# ================================================================
+def plot_gradient_map(counts, y_edges, z_edges):
+    """
+    Plot ||grad(E)|| where E is the 2D energy (counts) distribution.
+    This reveals local non-uniformity more clearly than the raw heatmap.
+    """
+
+    # Compute gradients (dy, dz)
+    # Note: counts is (Y bins, Z bins), but gradient order doesn't matter as long as consistent
+    dEy, dEz = np.gradient(counts)
+
+    grad_mag = np.sqrt(dEy**2 + dEz**2)
+
+    Y_centers = (y_edges[:-1] + y_edges[1:]) / 2
+    Z_centers = (z_edges[:-1] + z_edges[1:]) / 2
+
+    YY, ZZ = np.meshgrid(Y_centers, Z_centers)
+
+    plt.figure(figsize=(7, 12), clear=True)
+    plt.imshow(
+        grad_mag.T,
+        origin='lower',
+        extent=[y_edges[0], y_edges[-1], z_edges[0], z_edges[-1]],
+        cmap="inferno",
+        aspect='equal',
+        vmax=gradient_max
+    )
+
+    cbar = plt.colorbar(label='|∇E| (Gradient Magnitude)')
+    cbar.ax.tick_params(labelsize=14)
+    cbar.set_label('|∇E| (Gradient Magnitude)', fontsize=16)
+
+    plt.title("Gradient Map (Local Uniformity)", fontsize=18)
+    plt.xlabel("Y position (mm)", fontsize=16)
+    plt.ylabel("Z position (mm)", fontsize=16)
+    plt.tick_params(axis='both', labelsize=14)
+    plt.grid(False)
+    plt.tight_layout()
+
+    print("\nGradient map generated (showing local non-uniform regions).")
 
 # ================================================================
 # Entry Point
