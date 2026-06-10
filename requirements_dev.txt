@@ -6,3 +6,6 @@ jupyter
 matplotlib
 pandas
 pytest
+PySide2
+progressbar2
+matplotlib

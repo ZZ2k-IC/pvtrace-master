@@ -3,3 +3,6 @@ meshcat>=0.0.16
 numpy
 pandas
 trimesh[easy]
+PySide2
+progressbar2
+matplotlib
