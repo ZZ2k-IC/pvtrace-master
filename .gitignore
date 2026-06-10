@@ -66,3 +66,7 @@ pvtrace_v2.1.sv_old/scene/__pycache__/renderer.cpython-37.pyc
 pvtrace_v2.1.sv_old/scene/__pycache__/scene.cpython-37.pyc
 pvtrace_v2.1.sv_old/scene/node.py
 pvtrace_v2.1.sv_old/scene/renderer.py
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
