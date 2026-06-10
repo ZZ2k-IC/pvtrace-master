@@ -1,286 +1,173 @@
-![](https://raw.githubusercontent.com/danieljfarrell/pvtrace/master/docs/logo.png)
+> Optical ray tracing for room-temperature maser gain media and invasive optical pumping structures
 
-> Optical ray tracing for luminescent materials and spectral converter photovoltaic devices
+# Ray-tracing optical pumping systems for solid-state masers
 
-# Ray-tracing luminescent solar concentrators
+*pvtrace-maser* is a modified version of *pvtrace*, a statistical photon path tracer written in Python.
 
-*pvtrace* is a statistical photon path tracer written in Python. Rays are followed through a 3D scene and their interactions with objects are recorded to build up statistical information about energy flow.
+Rays are propagated through a 3D scene and their interactions with materials, interfaces, and embedded optical structures are recorded to build up statistical information about optical power transport and absorption.
 
-This is useful in photovoltaics and non-imaging optics where the goal is to design systems which efficiently transport light to target locations. 
+This project is based on:
 
-One of its key features is the ability to simulate re-absorption in luminescent materials. For example, like in devices like Luminescent Solar Concentrators (LSCs).
+- Daniel Farrell's original **pvtrace**
+- Shomik Verma's **pvtrace-sv**
 
-A basic LSC can be simulated and visualised in five lines of code,
+The current version further extends the framework for modelling optical pumping in room-temperature solid-state masers, particularly pentacene-doped para-terphenyl (Pc:PTP) systems.
 
-```python
-from pvtrace import *
-lsc = LSC((5.0, 5.0, 1.0))  # size in cm
-lsc.show()                  # open visualiser
-lsc.simulate(100)           # emit 100 rays
-lsc.report()                # print report
-```
+Unlike the original pvtrace package, which primarily targets luminescent solar concentrators (LSCs), this version focuses on:
 
-This script will render the ray-tracing in real time,
+- invasive optical pumping
+- embedded optical waveguides
+- multi-blade optical injectors
+- optical absorption uniformity
+- maser gain-medium illumination
 
-![](https://raw.githubusercontent.com/danieljfarrell/pvtrace/master/docs/pvtrace-demo.gif)
+---
 
-pvtrace has been validate against three other luminescent concentrator codes. For full details see [Validation.ipynb](https://github.com/danieljfarrell/pvtrace/blob/master/examples/Validation.ipynb) notebook
+# Development History
 
-![](https://raw.githubusercontent.com/danieljfarrell/pvtrace/master/examples/Validation.png)
+## Original pvtrace
 
-# Install
+Original repository:
 
-## MacOS using pyenv
+https://github.com/danieljfarrell/pvtrace
 
-On MacOS *pvtrace* can be installed easily using [pyenv](https://github.com/pyenv/pyenv), the `pip` command and [homebrew](https://brew.sh). First install [homebrew](https://brew.sh), then install `spatialindex` for the RTree dependency,
+A Monte-Carlo optical ray-tracing package for luminescent materials, luminescent solar concentrators (LSCs), and spectral conversion devices.
 
-    brew install spatialindex
+## pvtrace-sv
 
-Next, create a clean virtual environment for pvtrace
+Modifications introduced by Shomik Verma:
 
-    pyenv install 3.7.8
-    pyenv virtualenv 3.7.8 pvtrace-env
-    pyenv activate pvtrace-env
-    pip install pvtrace
+- Support for unconventional LSC geometries
+- Surface normal recording during ray tracing
+- Parallel simulation scripts
+- Initial PySide2 GUI support
 
-## Linux and Windows using Conda
+Original repository:
 
-On Linux and Windows you must use conda to create the python environment. Optionally you can also use this method on MacOS too if you prefer conda over pyenv.
+https://github.com/shomikverma/pvtrace-sv
 
-    conda create --name pvtrace-env python=3.7.8
-    conda activate pvtrace-env
-    conda install Rtree
-    pip install pvtrace
+## Current Extension
 
-# Run the example script and notebooks
+Additional modifications introduced for room-temperature maser research:
 
-Download the [hello_world.py](https://raw.githubusercontent.com/danieljfarrell/pvtrace/master/examples/hello_world.py) example script either manually or using `curl`,
+### Waveguide–Gain-Medium Architecture
 
-    # Download example script
-    curl https://raw.githubusercontent.com/danieljfarrell/pvtrace/master/examples/hello_world.py > hello_world.py
+Support for simulations containing:
 
-Now active your python environment! 
+- Gain medium
+- Embedded optical waveguide / injector
 
-If you installed using **pyenv** do the following,
+allowing direct simulation of invasive optical pumping structures.
 
-    pyenv local pvtrace-env
+### Multi-Part STL Waveguide Support
 
-If you are using **conda** to this,
+Support for importing multiple STL files as a single optical injector structure.
 
-    conda activate pvtrace-env
+Applications include:
 
-Now start the meshcat server with the command,
+- wedge injectors
+- multi-blade injectors
+- arbitrary embedded waveguide geometries
 
-    meshcat-server
+### Maser-Specific Absorption Model
 
-This will print information like,
+This version is designed specifically for Pc:PTP maser pumping simulations.
 
-    zmq_url=tcp://127.0.0.1:6000
-    web_url=http://127.0.0.1:7000/static/
+Key assumptions include:
 
-Open a new terminal window and again activate your pvtrace-env.
+- absorption evaluated along the crystal pumping axis (Z-axis)
+- Beer-Lambert absorption based on projected propagation distance
+- optical penetration modelling for embedded waveguide systems
 
-Open `hello_world.py` and make sure the line below has `zmq_url` of your meshcat-server,
+### Ray-Tracing Engine Improvements
 
-    # Change zmq_url here to be the address of your meshcat-server!
-    renderer = MeshcatRenderer(
-        zmq_url="tcp://127.0.0.1:6000", wireframe=True, open_browser=True
-    )   
+Several kernel-level modifications have been implemented, including:
 
-You can now run pvtrace scripts! Run this following command,
+- robust container identification for multi-part geometries
+- improved STL overlap handling
+- corrected optical path-length accounting
+- improved waveguide-to-crystal transport
+- improved interface handling
 
-    python hello_world.py
+### Analysis Features
 
-Also take a look at the online Jupyter notebook tutorial series which provide an overview of pvtrace and examples,
+- absorption heatmaps
+- optical power uniformity analysis
+- detector-plane support
+- custom LED angular emission distributions
 
- 1. [Quick Start.ipynb](https://github.com/danieljfarrell/pvtrace/blob/master/examples/001%20Quick%20Start.ipynb), an interactive ray-tracing tutorial (download an run locally)
- 2. [Materials.ipynb](https://github.com/danieljfarrell/pvtrace/blob/master/examples/002%20Materials.ipynb), include physical properties with materials
- 3. [Lights.ipynb](https://github.com/danieljfarrell/pvtrace/blob/master/examples/003%20Lights.ipynb), place photon sources in the scene and customise their properties
- 4. [Nodes.ipynb](https://github.com/danieljfarrell/pvtrace/blob/master/examples/004%20Nodes.ipynb) translate and rotate scene objects with nodes
- 5. [Geometry.ipynb](https://github.com/danieljfarrell/pvtrace/blob/master/examples/005%20Geometry.ipynb) define the shapes of objects in your scene
- 6. [Coatings.ipynb](https://github.com/danieljfarrell/pvtrace/blob/master/examples/006%20Coatings.ipynb) introduce custom reflections with coatings
-
-Download and run these notebooks locally for a more interactive experience, but first install jupyter,
+---
 
-    pip install jupyter
-
-or with conda,
-
-    conda install jupyter
-
-Then launch the jupyter notebook,
-
-    jupyter notebook
-
-# Features
-
-## Ray optics simulations
-
-*pvtrace* supports 3D ray optics simulations shapes,
-
-* box
-* sphere
-* cylinder
-* mesh
-
-The optical properties of each shape can be customised,
-
-* refractive index
-* absorption coefficient
-* scattering coefficient
-* emission lineshape
-* quantum yield
-* surface reflection
-* surface scattering
-
-![](https://raw.githubusercontent.com/danieljfarrell/pvtrace/master/docs/example.png)
-
-## High and low-level API
-
-*pvtrace* has a high-level API for handling common problems with LSCs and a low-level API where objects can be positioned in a 3D scene and optical properties customised.
-
-For example, a script using the low-level API to ray trace this glass sphere is below,
-
-```python
-import time
-import sys
-import functools
-import numpy as np
-from pvtrace import *
-
-# World node contains all objects
-world = Node(
-    name="world (air)",
-    geometry=Sphere(
-        radius=10.0,
-        material=Material(refractive_index=1.0),
-    )
-)
-
-# The glass sphere
-sphere = Node(
-    name="sphere (glass)",
-    geometry=Sphere(
-        radius=1.0,
-        material=Material(refractive_index=1.5),
-    ),
-    parent=world
-)
-sphere.location = (0, 0, 2)
-
-# The source of rays
-light = Node(
-    name="Light (555nm)",
-    light=Light(direction=functools.partial(cone, np.pi/8)),
-    parent=world
-)
-
-# Render and ray-trace
-renderer = MeshcatRenderer(wireframe=True, open_browser=True)
-scene = Scene(world)
-renderer.render(scene)
-for ray in scene.emit(100):
-    steps = photon_tracer.follow(scene, ray)
-    path, events = zip(*steps)
-    renderer.add_ray_path(path)
-    time.sleep(0.1)
-
-# Wait for Ctrl-C to terminate the script; keep the window open
-print("Ctrl-C to close")
-while True:
-    try:
-        time.sleep(.3)
-    except KeyboardInterrupt:
-        sys.exit()
-```
-
-## Scene Graph
-
-*pvtrace* is designed in layers each with as limited scope as possible.
-
-![](https://raw.githubusercontent.com/danieljfarrell/pvtrace/master/docs/pvtrace-design.png)
-
-<dl>
-  <dt>Scene</dt>
-  <dd>Graph data structure of node and the thing that is ray-traced.</dd>
-  
-  <dt>Node</dt>
-  <dd>Provides a coordinate system, can be nested inside one another, perform arbitrary rotation and translation transformations.</dd>
-  
-  <dt>Geometry</dt>
-  <dd>Attached to nodes to define different shapes (Sphere, Box, Cylinder, Mesh) and handles all ray intersections.</dd>
-  
-  <dt>Material</dt>
-  <dd>Attached to geometry objects to assign physical properties to shapes such as refractive index.</dd>
-  
-  <dt>Surface</dt>
-  <dd>Handles details of interaction between material surfaces and a customisation point for simulation of wavelength selective coatings.</dd>
-  
-  <dt>Components</dt>
-  <dd>Specifies optical properties of the geometries volume, absorption coefficient, scattering coefficient, quantum yield, emission spectrum.</dd>
-  
-  <dt>Ray-tracing engine</dt>
-  <dd>The algorithm which spawns rays, computes intersections, samples probabilities and traverses the rays through the scene.</dd>
-</dl>
-
-## Ray-tracing engine
-
-Currently *pvtrace* supports only one ray-tracing engine: a photon path tracer. This is physically accurate, down to treating individual absorption and emission events, but is slow because the problem cannot be vectorised as each ray is followed individually.
-
-# Documentation
-
-Interactive Jupyter notebooks are in [examples directory](https://github.com/danieljfarrell/pvtrace/tree/master/examples), download and take a look, although they can be viewed online.
-
-# Contributing
-
-Please use the github [issue](https://github.com/danieljfarrell/pvtrace/issues) tracker for bug fixes, suggestions, or support questions.
-
-If you are considering contributing to pvtrace, first fork the project. This will make it easier to include your contributions using pull requests.
-
-## Creating a development environment
-
-1. First create a new development environment using [MacOS instructions](#macos-using-pyenv) or [Linux and Windows instructions](#linux-and-windows-using-conda), but do not install pvtrace using pip! You will need to clone your own copy of the source code in the following steps.
-2. Use the GitHub fork button to make your own fork of the project. This will make it easy to include your changes in pvtrace using a pull request.
-3. Follow the steps below to clone and install the development dependencies
+# GUI
+
+A PySide2-based graphical user interface is included.
+
+Run:
 
 ```bash
-# Pull from your fork
-git clone https://github.com/<your username>/pvtrace.git
-
-# Get development dependencies
-pip install -r pvtrace/requirements_dev.txt 
-
-# Add local `pvtrace` directory to known packages
-pip install -e pvtrace
-
-# Run units tests
-pytest pvtrace/tests
-
-# Run an example
-python pvtrace/examples/hello_world.py
+python GUI/main.py
 ```
 
-You should now be able to edit the source code and simply run scripts directly without the need to reinstall anything.
+The GUI supports:
 
-## Unit tests
+- gain-medium definition
+- embedded waveguide definition
+- STL geometry import
+- optical source configuration
+- detector placement
+- uniformity analysis
+- result export
 
-Please add or modify an existing unit tests in the `pvtrace/tests` directory if you are adding new code. This will make it much easier to include your changes in the project.
+---
 
-## Pull requests
+# Installation
 
-Pull requests will be considered. Please make contact before doing a lot of work, to make sure that the changes will definitely be included in the main project.
+Tested using:
 
-# Questions
+```text
+Python 3.7.9 (3.7.0 < Any versions < 3.8.0)
+```
 
-You can get in contact with me directly at dan@excitonlabs.com or raise an issue on the issue tracker.
+Clone the repository:
 
-# Dependencies
+```bash
+git clone <repository-url>
+cd pvtrace-maser
+```
 
-Basic environment requires the following packages which will be installed with `pip` automatically
+Install locally:
 
-* python >= 3.7.2
-* numpy
-* pandas
-* trimesh[easy]
-* meshcat >= 0.0.16
-* anytree
+```bash
+pip install -e .
+```
+
+Required packages:
+
+```text
+numpy
+pandas
+matplotlib
+anytree
+meshcat>=0.0.16
+trimesh[easy]
+PySide2
+progressbar2
+```
+
+All required packages should be installed automatically through `setup.py`.
+
+---
+
+# Acknowledgements
+
+- Daniel Farrell — original pvtrace framework
+- Shomik Verma — pvtrace-sv modifications
+- Imperial College London Mark Oxborrow Maser Group
+
+---
+
+# Disclaimer
+
+This fork is not intended as a general-purpose luminescent solar concentrator simulator.
+
+It has been specifically developed for optical pumping simulations of room-temperature solid-state masers and embedded waveguide structures.
