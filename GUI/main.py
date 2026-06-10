@@ -942,7 +942,7 @@ class testingQT(QWidget):
         def addRealLambertian(light):
             # Assign the function itself (not the result of calling it)
             # Each time light emits, it will call lambertian_with_fresnel() to get a new direction
-            light.light.direction = lambda: lambertian_with_fresnel(n1=1.6, n2=1.815)
+            light.light.direction = lambda: lambertian_with_fresnel(n1=1.6, n2=1.8)
             return light
         
         # # Add this after loading your direction data (around line 758)
@@ -2599,7 +2599,7 @@ class testingQT(QWidget):
             light = addLightDiv(light, lightDiv)
         if lightDiv == 0:
             light = addStraightRays(light)  # Straight rays for lightDiv = 0
-        if lightDiv == 233:
+        if lightDiv == 1234567:
             light = addRealLambertian(light) # Lambertian with Fresnel for special case
             
         start_t = time.time()

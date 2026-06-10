@@ -38,7 +38,7 @@
     </rect>
    </property>
    <property name="title">
-    <string>Create LSC</string>
+    <string>First LSC (Gain Medium)</string>
    </property>
    <widget class="QFrame" name="frame">
     <property name="geometry">
@@ -1522,7 +1522,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>4.79</string>
+     <string>4.96</string>
     </property>
     <property name="placeholderText">
      <string>y</string>
@@ -1538,7 +1538,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>2.96</string>
+     <string>4.96</string>
     </property>
     <property name="placeholderText">
      <string>x</string>
@@ -1586,7 +1586,7 @@
      </rect>
     </property>
     <property name="text">
-     <string>32</string>
+     <string>45</string>
     </property>
    </widget>
    <widget class="QLabel" name="label_30">
