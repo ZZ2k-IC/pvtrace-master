@@ -17,8 +17,8 @@ Unlike the original pvtrace package, which primarily targets luminescent solar c
 
 - invasive optical pumping
 - embedded optical waveguides
-- multi-blade optical injectors
-- optical absorption uniformity
+- multi-part optical injectors
+- optical absorption distribution
 - maser gain-medium illumination
 
 ---
@@ -92,7 +92,6 @@ Several kernel-level modifications have been implemented, including:
 ### Analysis Features
 
 - absorption heatmaps
-- optical power uniformity analysis
 - detector-plane support
 - custom LED angular emission distributions
 
@@ -131,7 +130,7 @@ Python 3.7.9 (3.7.0 < Any versions < 3.8.0)
 Clone the repository:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/ZZ2k-IC/pvtrace-maser.git
 cd pvtrace-maser
 ```
 
