@@ -274,7 +274,7 @@ def _build_fresnel_cdf(n1=1.6, n2=1.815, num_bins=100000):
     
     return theta_n2, cdf
 
-def lambertian_with_fresnel(n1=1.6, n2=1.815, num_bins=100000):
+def lambertian_with_fresnel(n1=1.6, n2=1.815, num_bins=1000000):
     """
     Sample truncated Lambertian distribution with Fresnel transmission losses.
     Light passes through: air (n=1.0) → medium1 (n=n1) → medium2 (n=n2)

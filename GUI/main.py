@@ -1998,175 +1998,25 @@ class testingQT(QWidget):
         original_find_container = photon_tracer.find_container
 
         def corrected_find_container(intersections):
-            """Fixed container detection that ignores detectors"""
-            if len(intersections) == 0:
-                return None
-            if len(intersections) == 1:
-                return intersections[0].hit
-            
-            # Filter out detectors - they can't be containers
-            container_candidates = []
-            for intersection in intersections:
-                if "Detector" not in intersection.hit.name:
-                    container_candidates.append(intersection)
-            
-            # If no valid containers found, use World
-            if len(container_candidates) == 0:
-                for intersection in intersections:
-                    if intersection.hit.name == "World":
-                        return intersection.hit
-                return intersections[0].hit  # Fallback
-            
-            # Use original logic on filtered candidates
-            if len(container_candidates) == 1:
-                return container_candidates[0].hit
-            return original_find_container(container_candidates)
+
+            filtered = [
+                x for x in intersections
+                if "Detector" not in x.hit.name
+            ]
+
+            if len(filtered) == 0:
+                return original_find_container(intersections)
+
+            return original_find_container(filtered)
         
         # Apply the fix
         photon_tracer.find_container = corrected_find_container
 
-        def corrected_next_hit(scene, ray):
-            """
-            Container-aware next_hit that prioritizes current container's surfaces.
-            
-            When ray is inside a waveguide embedded in absorber:
-            - Should hit waveguide's own surface first (for TIR, refraction out)
-            - Should NOT prematurely target other nearby waveguides' surfaces
-            
-            This prevents the "attraction" problem where nearby waveguides pull rays out.
-            """
-            # Get all intersections
-            intersections = scene.intersections(ray.position, ray.direction)
-            
-            # Remove on-surface intersections
-            from pvtrace.algorithm.photon_tracer import close_to_zero
-            intersections = [x for x in intersections if not close_to_zero(x.distance)]
-            
-            # Convert to world coordinates
-            intersections = [x.to(scene.root) for x in intersections]
-            
-            if len(intersections) == 0:
-                return None
-            
-            # Find current container
-            container = corrected_find_container(intersections)
-            
-            # Single intersection case
-            if len(intersections) == 1:
-                hit = intersections[0]
-                hit_node = hit.hit
-                return hit_node, (hit_node, None), hit.point, hit.distance
-            
-            # CRITICAL FIX: Filter intersections to prioritize container's own surfaces
-            # When inside a waveguide, we should hit the waveguide's surface first,
-            # NOT another waveguide's surface even if it's closer
-            
-            # Separate container surfaces from other surfaces
-            container_intersections = []
-            other_intersections = []
-            
-            for intersection in intersections:
-                if intersection.hit == container:
-                    # This is the container's own surface
-                    container_intersections.append(intersection)
-                else:
-                    # This is another object's surface
-                    other_intersections.append(intersection)
-            
-            # If we have container surfaces, ALWAYS prioritize them
-            # This prevents rays from "escaping" to nearby objects
-            if len(container_intersections) > 0:
-                # Use closest container surface
-                hit = container_intersections[0]
-                hit_node = hit.hit
-                point = hit.point
-                distance = hit.distance
-                
-                # Adjacent is the next container we'll enter
-                if len(other_intersections) > 0:
-                    adjacent = other_intersections[0].hit
-                else:
-                    adjacent = scene.root  # Exit to world
-                
-                return hit_node, (container, adjacent), point, distance
-            
-            # If no container surfaces (shouldn't happen), fall back to original logic
-            hit = intersections[0]
-            hit_node = hit.hit
-            point = hit.point
-            distance = hit.distance
-            
-            if container == hit_node:
-                adjacent = intersections[1].hit if len(intersections) > 1 else None
-            else:
-                adjacent = hit_node
-            
-            return hit_node, (container, adjacent), point, distance
-
-
-
-        def verify_actual_container(scene, ray_position):
-            """
-            Enhanced container check: cast rays in both +X and -X directions.
-            If BOTH nearest intersections are waveguides (LSC2/3/4), ray is inside waveguide.
-            Otherwise, ray is in LSC absorber.
-            """
-            # Cast ray in +X direction
-            intersections_pos = scene.intersections(ray_position, (1, 0, 0))
-            intersections_pos = [x for x in intersections_pos if not np.isclose(x.distance, 0.0)]
-            
-            # Cast ray in -X direction
-            intersections_neg = scene.intersections(ray_position, (-1, 0, 0))
-            intersections_neg = [x for x in intersections_neg if not np.isclose(x.distance, 0.0)]
-            
-            # Check if we have intersections in both directions
-            if len(intersections_pos) == 0 or len(intersections_neg) == 0:
-                return None  # In World or edge case
-            
-            # Convert to world coordinates and sort by distance
-            intersections_pos = [x.to(scene.root) for x in intersections_pos]
-            intersections_pos.sort(key=lambda x: x.distance)
-            
-            intersections_neg = [x.to(scene.root) for x in intersections_neg]
-            intersections_neg.sort(key=lambda x: x.distance)
-            
-            # Get nearest intersections in both directions
-            nearest_pos_name = intersections_pos[0].hit.name
-            nearest_neg_name = intersections_neg[0].hit.name
-            
-            # Filter out World and Detector for positive direction
-            if "World" in nearest_pos_name or "Detector" in nearest_pos_name:
-                if len(intersections_pos) > 1:
-                    nearest_pos_name = intersections_pos[1].hit.name
-                else:
-                    nearest_pos_name = None
-            
-            # Filter out World and Detector for negative direction
-            if "World" in nearest_neg_name or "Detector" in nearest_neg_name:
-                if len(intersections_neg) > 1:
-                    nearest_neg_name = intersections_neg[1].hit.name
-                else:
-                    nearest_neg_name = None
-            
-            # Check if BOTH directions hit waveguides (now includes Part0, Part1, etc.)
-            is_pos_waveguide = "Waveguide" in nearest_pos_name if nearest_pos_name else False
-            is_neg_waveguide = "Waveguide" in nearest_neg_name if nearest_neg_name else False
-            
-            if is_pos_waveguide and is_neg_waveguide:
-                # Ray is surrounded by waveguide material in both directions
-                # Return the waveguide name (should be the same in both directions)
-                return nearest_pos_name
-            else:
-                # Ray is in LSC absorber (at least one direction hits LSC)
-                return "LSC"
 
         def corrected_follow(scene, ray, maxsteps=1000, maxpathlength=np.inf, emit_method='kT'):
             count = 0
             history = [(ray, (None,None,None), Event.GENERATE)]
             
-            # Track cumulative absorption: distance traveled through absorber without being absorbed
-            # This accumulates when we skip absorption due to waveguide detection
-            accumulated_absorber_distance = 0.0
             
             while True:
                 count += 1
@@ -2174,7 +2024,7 @@ class testingQT(QWidget):
                     history.append((ray, (None,None,None), Event.KILL))
                     break
             
-                info = original_next_hit(scene, ray)  # Use original PVTrace version
+                info = original_next_hit(scene, ray)  # Use original PVTrace version, since the corrected_find_container is now in place, corrected_next_hit logic is already integrated into the find_container fix
                 if info is None:
                     history.append((ray, (None,None,None), Event.EXIT))
                     break
@@ -2225,140 +2075,46 @@ class testingQT(QWidget):
                 #     corrected_adjacent = adjacent
                 
                 material = container.geometry.material
-                
-                # Z-DIRECTIONAL ABSORPTION: Calculate Z-component of travel distance
-                # Get the ray direction and calculate the Z-component of the full distance
-                ray_direction = ray.direction
-                z_component_fraction = abs(ray_direction[2])  # |cos(theta)| where theta is angle from Z-axis
-                z_distance = full_distance * z_component_fraction  # Project full distance onto Z-axis
-                
-                # CUMULATIVE ABSORPTION: Adjust absorption check based on Z-distance only
-                # If ray has accumulated absorber distance, we need to account for that
-                effective_z_distance = z_distance + accumulated_absorber_distance
-                absorbed, at_z_distance = material.is_absorbed(ray, effective_z_distance)
-                
-                # Adjust at_z_distance to account for accumulated distance
-                if absorbed and at_z_distance > accumulated_absorber_distance:
-                    # Absorption occurs beyond the accumulated distance
-                    at_z_distance = at_z_distance - accumulated_absorber_distance
-                    # Convert Z-distance back to full 3D distance for propagation
-                    at_distance = at_z_distance / z_component_fraction if z_component_fraction > 0 else full_distance
-                elif absorbed:
-                    # Absorption should have occurred in the accumulated segment
-                    # This means ray is absorbed immediately
-                    at_distance = 0.0
+
+                # Pentacene host: absorb only along z
+                if container.name == "LSC":
+
+                    z_component_fraction = abs(ray.direction[2])
+                    absorption_distance = (
+                        full_distance * z_component_fraction
+                    )
+
+                    absorbed, at_z_distance = material.is_absorbed(
+                        ray,
+                        absorption_distance
+                    )
+
+                    if absorbed:
+                        at_distance = (
+                            at_z_distance / z_component_fraction
+                            if z_component_fraction > 1e-12
+                            else full_distance
+                        )
+                    else:
+                        at_distance = full_distance
+
+                # Ce:YAG waveguides: normal Beer-Lambert
                 else:
-                    at_distance = full_distance
+
+                    absorbed, at_distance = material.is_absorbed(
+                        ray,
+                        full_distance
+                    )
                 
                 if absorbed and at_distance < full_distance:
                     # Store ray state before propagation
-                    ray_before_absorption = ray
                     ray_after_absorption = ray.propagate(at_distance)
                     
-                    # SAFETY CHECK: Verify which object we're actually in
-                    actual_container_name = verify_actual_container(scene, ray_after_absorption.position)
-                    
-                    # If absorption point is inside a waveguide (including multi-part waveguides)
-                    # we need to handle the interface properly
-                    if actual_container_name and "Waveguide" in actual_container_name:
-                        # Find the waveguide node by searching all children
-                        waveguide_node = None
-                        
-                        # Search in world's direct children
-                        for node in scene.root.children:
-                            if node.name == actual_container_name:
-                                waveguide_node = node
-                                break
-                            # Also check if it's a child of LSC or a parent container
-                            if hasattr(node, 'children'):
-                                for child in node.children:
-                                    if child.name == actual_container_name:
-                                        waveguide_node = child
-                                        break
-                                if waveguide_node:
-                                    break
-                            if node.name == actual_container_name:
-                                waveguide_node = node
-                                break
-                        
-                        if waveguide_node is not None:
-                            # Find intersection from current container to the waveguide
-                            # Start from ray_before_absorption, find where it enters the waveguide
-                            test_ray = ray_before_absorption
-                            intersections = scene.intersections(test_ray.position, test_ray.direction)
-                            
-                            # Find the first intersection with the target waveguide
-                            waveguide_intersection = None
-                            for intersection in intersections:
-                                if intersection.hit.name == actual_container_name:
-                                    waveguide_intersection = intersection
-                                    break
-                            
-                            if waveguide_intersection is not None:
-                                # CRITICAL: Accumulate the Z-component of absorber transit distance
-                                # This distance would have contributed to absorption probability
-                                # We need to account for it in future absorption checks
-                                interface_distance = waveguide_intersection.distance
-                                
-                                # Calculate Z-component of the transit distance
-                                ray_direction_before = ray_before_absorption.direction
-                                z_component_fraction_transit = abs(ray_direction_before[2])
-                                z_interface_distance = interface_distance * z_component_fraction_transit
-                                
-                                # Add this Z-transit distance to accumulated absorber path
-                                accumulated_absorber_distance += z_interface_distance
-                                
-                                # Propagate to the waveguide interface (Point G)
-                                ray = ray_before_absorption.propagate(interface_distance)
-                                
-                                # Apply Fresnel equations at the interface
-                                interface_hit = waveguide_intersection.hit
-                                interface_surface = interface_hit.geometry.material.surface
-                                ray = ray.representation(scene.root, interface_hit)
-                                
-                                # Determine if ray reflects or transmits
-                                if interface_surface.is_reflected(ray, interface_hit.geometry, container, waveguide_node):
-                                    # Ray reflects back into absorber
-                                    ray = interface_surface.reflect(ray, interface_hit.geometry, container, waveguide_node)
-                                    ray = ray.representation(interface_hit, scene.root)
-                                    
-                                    try:
-                                        local_pos = list(np.array(ray.position) - np.array(interface_hit.location))
-                                        normal = interface_hit.geometry.normal(local_pos)
-                                    except:
-                                        normal = (None, None, None)
-                                    
-                                    history.append((ray, normal, Event.REFLECT))
-                                    continue
-                                else:
-                                    # Ray transmits into waveguide
-                                    ref_ray = interface_surface.transmit(ray, interface_hit.geometry, container, waveguide_node)
-                                    if ref_ray is None:
-                                        history.append((ray, (None,None,None), Event.KILL))
-                                        break
-                                    
-                                    ray = ref_ray
-                                    ray = ray.representation(interface_hit, scene.root)
-                                    
-                                    try:
-                                        local_pos = list(np.array(ray.position) - np.array(interface_hit.location))
-                                        normal = interface_hit.geometry.normal(local_pos)
-                                    except:
-                                        normal = (None, None, None)
-                                    
-                                    history.append((ray, normal, Event.TRANSMIT))
-                                    
-                                    # Reset accumulated distance since ray entered waveguide (low absorption)
-                                    accumulated_absorber_distance = 0.0
-                                    continue
-                        
-                        # If we couldn't find the waveguide intersection, just continue (safety fallback)
-                        ray = ray_after_absorption
-                        continue
                     
                     # Normal absorption in the correct container (LSC absorber)
                     ray = ray_after_absorption
                     component = material.component(ray.wavelength)
+
                     if component is not None and component.is_radiative(ray):
                         ray = component.emit(ray.representation(scene.root, container), method=emit_method)
                         ray = ray.representation(container, scene.root)
@@ -2417,7 +2173,6 @@ class testingQT(QWidget):
 
         # Apply the fixes
         photon_tracer.find_container = corrected_find_container
-        photon_tracer.next_hit = corrected_next_hit
         photon_tracer.follow = corrected_follow
 
         if(enclosingBox):

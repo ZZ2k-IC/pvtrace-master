@@ -66,8 +66,10 @@ class Mesh(Geometry):
         (closest_points, distances, triangle_id) = mesh.nearest.on_surface(np.array([surface_point]))
         if closest_points.shape != (1, 3):
             raise GeometryError('Mesh must have a single closest point to calculate normal.')
-        if not np.any(np.absolute(distances) < 1e-10):
-          raise GeometryError('Point is not on surface.', {"point": surface_point, "geometry": self, "distances": distances, "threshold": EPS_ZERO})
+        # Use more relaxed tolerance for meshes (1 micrometer instead of picometers)
+        MESH_TOLERANCE = 1e-7
+        if not np.any(np.absolute(distances) < MESH_TOLERANCE):
+          raise GeometryError('Point is not on surface.', {"point": surface_point, "geometry": self, "distances": distances, "threshold": MESH_TOLERANCE})
         normal = tuple(mesh.face_normals[triangle_id[0]])
         return normal
 
