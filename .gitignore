@@ -70,3 +70,5 @@ pvtrace_v2.1.sv_old/scene/renderer.py
 __pycache__/
 *.pyc
 *.egg-info/
+.vscode/
+pvtrace.egg-info/
