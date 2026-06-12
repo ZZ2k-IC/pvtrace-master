@@ -79,15 +79,8 @@ Key assumptions include:
 - Beer-Lambert absorption based on projected propagation distance
 - optical penetration modelling for embedded waveguide systems
 
-### Ray-Tracing Engine Improvements
-
-Several kernel-level modifications have been implemented, including:
-
-- robust container identification for multi-part geometries
-- improved STL overlap handling
-- corrected optical path-length accounting
-- improved waveguide-to-crystal transport
-- improved interface handling
+### Engine Improvements
+- simple batch processing logics for cpu accelerations
 
 ### Analysis Features
 
@@ -114,8 +107,8 @@ The GUI supports:
 - STL geometry import
 - optical source configuration
 - detector placement
-- uniformity analysis
-- result export
+- 2D uniformity analysis
+- absorption result export
 
 ---
 
