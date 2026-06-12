@@ -91,7 +91,7 @@ def spherical_to_cart(theta, phi, r=1):
 
 #  Volume scattering
 
-def isotropic(theta_max=np.pi/2):
+def isotropic(theta_max=np.pi):
     """ Isotropic phase function.
     """
     g1, g2 = np.random.uniform(0, 1, 2)

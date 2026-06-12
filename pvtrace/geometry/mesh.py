@@ -11,9 +11,12 @@ class Mesh(Geometry):
     """ Wrapper making trimesh conform to the pvtrace Geometry protocol.
     """
     
-    def __init__(self, trimesh, material=None):
+    def __init__(self, trimesh, material=None, center_mesh=False):
         super(Mesh, self).__init__()
-        trimesh.vertices -= trimesh.center_mass
+
+        if center_mesh:
+            trimesh.vertices -= trimesh.center_mass
+
         self.trimesh = trimesh
         self._material = material
 
@@ -67,7 +70,7 @@ class Mesh(Geometry):
         if closest_points.shape != (1, 3):
             raise GeometryError('Mesh must have a single closest point to calculate normal.')
         # Use more relaxed tolerance for meshes (1 micrometer instead of picometers)
-        MESH_TOLERANCE = 1e-7
+        MESH_TOLERANCE = 1e-5
         if not np.any(np.absolute(distances) < MESH_TOLERANCE):
           raise GeometryError('Point is not on surface.', {"point": surface_point, "geometry": self, "distances": distances, "threshold": MESH_TOLERANCE})
         normal = tuple(mesh.face_normals[triangle_id[0]])

@@ -31,6 +31,7 @@ import json
 import time
 
 
+
 class testingQT(QWidget):
     def __init__(self):
         super(testingQT, self).__init__()
@@ -473,8 +474,8 @@ class testingQT(QWidget):
             world = Node(
             name="World",
             geometry = Sphere(
-                radius = 1.1*dim,
-                material=Material(refractive_index=1.63),
+                radius = 11*dim,
+                material=Material(refractive_index=1.0),
                 )   
             )
             
@@ -758,8 +759,8 @@ class testingQT(QWidget):
         def addLR305(LSC, LumConc, LumPLQY):
             wavelength_range = (wavMin, wavMax)
             x = np.linspace(wavMin, wavMax, 200)  # wavelength, units: nm
-            absorption_spectrum = lumogen_f_red_305.absorption(x)/10*LumConc  # units: cm-1
-            emission_spectrum = lumogen_f_red_305.emission(x)/10*LumConc      # units: cm-1
+            absorption_spectrum = lumogen_f_red_305.absorption(x)*LumConc  # units: mm-1
+            emission_spectrum = lumogen_f_red_305.emission(x)*LumConc      # units: mm-1
             LSC.geometry.material.components.append(
                 Luminophore(
                     coefficient=np.column_stack((x, absorption_spectrum)),
@@ -770,6 +771,11 @@ class testingQT(QWidget):
                 )
             return LSC, x, absorption_spectrum*10/LumConc, emission_spectrum*10/LumConc
         
+
+        def addCeYAG(LSC, LumConc, LumPLQY):
+            return None
+
+
         def addBottomSurf(LSC, bottomMir, bottomScat):
             if(bottomMir or bottomScat):
                 bottomSpacer = createBoxLSC(LSCdimX, LSCdimY, LSCdimZ/100)
@@ -936,7 +942,7 @@ class testingQT(QWidget):
             return light
                 
         def addLightDiv(light, lightDiv):
-            light.light.direction = functools.partial(lambertian, np.radians(lightDiv))
+            light.light.direction = functools.partial(isotropic, np.radians(lightDiv))
             return light
         
         def addRealLambertian(light):
@@ -1021,16 +1027,17 @@ class testingQT(QWidget):
                         continue
 
                     entrance_rays.append(path[0])
+
+                    # Draw every ray path in the web viewer.
+                    vis.add_history(
+                        steps,
+                        baubles=False,
+                        world_segment="short",
+                        short_length=LSCdimZ * 0.1,
+                        bauble_radius=LSCdimX * 0.005,
+                    )
                     
                     if events[-1] == photon_tracer.Event.ABSORB:
-                        # Use the enhanced add_history method to mark only the final absorption position
-                        vis.add_history(
-                            steps, 
-                            baubles=False,  # Don't show intermediate baubles
-                            mark_final_position=True,  # Mark the final absorption point
-                            final_position_radius=LSCdimX*0.005  # Larger sphere for visibility
-                        )
-                        
                         exit_norms.append(surfnorms[-1])
                         exit_rays.append(path[-1])
                         absorbed_rays.append(path[-1])
@@ -1189,20 +1196,23 @@ class testingQT(QWidget):
                     
                     batch_entrance.append(path[0])
                     
-                    # Add visualization for some rays (not all to avoid slowdown)
-                    if processed % 10 == 0:  # Visualize every 10th ray
-                        if events[-1] == photon_tracer.Event.ABSORB:
-                            vis.add_history(
-                                steps, 
-                                baubles=False,
-                                mark_final_position=True,
-                                final_position_radius=LSCdimX*0.005
-                            )
+                    # Draw every ray path in the web viewer.
+                    vis.add_history(
+                        steps,
+                        baubles=False,
+                        world_segment="short",
+                        short_length=LSCdimZ * 0.1,
+                        bauble_radius=LSCdimX * 0.005,
+                    )
                     
+# ...existing code...
                     if events[-1] == photon_tracer.Event.ABSORB:
                         batch_exit_norms.append(surfnorms[-1])
                         batch_exit.append(path[-1])
-                        batch_absorbed.append(path[-1])
+
+                        absorber_name = getattr(photon_tracer, "_last_absorber_name", "Unknown")
+                        batch_absorbed.append((path[-1], absorber_name))
+# ...existing code...
                     elif events[-1] == photon_tracer.Event.KILL:
                         batch_exit_norms.append(surfnorms[-1])
                         batch_exit.append(path[-1])
@@ -1344,18 +1354,29 @@ class testingQT(QWidget):
             numRays = len(entrance_rays)
             total_exit_rays = len(exit_rays)
 
-            # Add absorbed ray positions and wavelengths
-            xpos_abs = []
-            ypos_abs = []
-            zpos_zbs = []
-            direction_abs = []
-            absorbed_wavs = []
-            for ray in absorbed_rays:
-                absorbed_wavs.append(ray.wavelength)
-                xpos_abs.append(ray.position[0])
-                ypos_abs.append(ray.position[1])
-                zpos_zbs.append(ray.position[2])
-                direction_abs.append(ray.direction)
+            # # Add absorbed ray positions and wavelengths
+            # xpos_abs = []
+            # ypos_abs = []
+            # zpos_zbs = []
+            # direction_abs = []
+            # absorbed_wavs = []
+            # for ray in absorbed_rays:
+            #     absorbed_wavs.append(ray.wavelength)
+            #     xpos_abs.append(ray.position[0])
+            #     ypos_abs.append(ray.position[1])
+            #     zpos_zbs.append(ray.position[2])
+            #     direction_abs.append(ray.direction)
+
+# ...existing code...
+            # Keep only rays absorbed in the main LSC
+            absorbed_rays = [r for r, absorber in absorbed_rays if absorber == "LSC"]
+
+            absorbed_wavs = [r.wavelength for r in absorbed_rays]
+            xpos_abs = [r.position[0] for r in absorbed_rays]
+            ypos_abs = [r.position[1] for r in absorbed_rays]
+            zpos_zbs = [r.position[2] for r in absorbed_rays]
+            direction_abs = [r.direction for r in absorbed_rays]
+# ...existing code...
 
             # Calculate actual absorption (only ABSORB events)
             actual_absorbed_rays = len(absorbed_rays)
@@ -2010,7 +2031,7 @@ class testingQT(QWidget):
             return original_find_container(filtered)
         
         # Apply the fix
-        photon_tracer.find_container = corrected_find_container
+        # photon_tracer.find_container = corrected_find_container
 
 
         def corrected_follow(scene, ray, maxsteps=1000, maxpathlength=np.inf, emit_method='kT'):
@@ -2055,15 +2076,16 @@ class testingQT(QWidget):
                 # BRUTAL FIX: Force adjacent to be LSC when exiting any waveguide
                 # Since waveguides are embedded in LSC and separated from each other,
                 # any waveguide exit should interact with LSC material, not other waveguides
-                corrected_adjacent = adjacent
+
+                # corrected_adjacent = adjacent
                 
-                if "Waveguide" in container.name and container.name == hit.name:
-                    # Ray is inside a waveguide hitting its own surface (exiting)
-                    # Force adjacent to be the LSC absorber (parent)
-                    for node in scene.root.children:
-                        if node.name == "LSC":
-                            corrected_adjacent = node
-                            break
+                # if "Waveguide" in container.name and container.name == hit.name:
+                #     # Ray is inside a waveguide hitting its own surface (exiting)
+                #     # Force adjacent to be the LSC absorber (parent)
+                #     for node in scene.root.children:
+                #         if node.name == "LSC":
+                #             corrected_adjacent = node
+                #             break
                 
                 # # FIX: Correct adjacent detection for waveguide surfaces in the air
                 # if hit.name == "LSC2_Waveguide" and container.name == "LSC2_Waveguide":
@@ -2105,14 +2127,9 @@ class testingQT(QWidget):
                         ray,
                         full_distance
                     )
-                
+
                 if absorbed and at_distance < full_distance:
-                    # Store ray state before propagation
-                    ray_after_absorption = ray.propagate(at_distance)
-                    
-                    
-                    # Normal absorption in the correct container (LSC absorber)
-                    ray = ray_after_absorption
+                    ray = ray.propagate(at_distance)
                     component = material.component(ray.wavelength)
 
                     if component is not None and component.is_radiative(ray):
@@ -2131,6 +2148,7 @@ class testingQT(QWidget):
                         continue
                     else:
                         # Non-radiative absorption - ray is absorbed
+                        setattr(photon_tracer, "_last_absorber_name", container.name)
                         history.append((ray, (None,None,None), Event.ABSORB))
                         break
                 else:
@@ -2139,8 +2157,8 @@ class testingQT(QWidget):
                     ray = ray.representation(scene.root, hit)
                     
                     # Use corrected adjacent for surface interactions
-                    if surface.is_reflected(ray, hit.geometry, container, corrected_adjacent):
-                        ray = surface.reflect(ray, hit.geometry, container, corrected_adjacent)
+                    if surface.is_reflected(ray, hit.geometry, container, adjacent): #Not corrected_adjacent!!
+                        ray = surface.reflect(ray, hit.geometry, container, adjacent)
                         ray = ray.representation(hit, scene.root)
                         
                         try:
@@ -2152,7 +2170,7 @@ class testingQT(QWidget):
                         history.append((ray, normal, Event.REFLECT))
                         continue
                     else:
-                        ref_ray = surface.transmit(ray, hit.geometry, container, corrected_adjacent)
+                        ref_ray = surface.transmit(ray, hit.geometry, container, adjacent)
                         if ref_ray is None:
                             history.append((ray, (None,None,None), Event.KILL))
                             break
@@ -2172,7 +2190,7 @@ class testingQT(QWidget):
             return history
 
         # Apply the fixes
-        photon_tracer.find_container = corrected_find_container
+        # photon_tracer.find_container = corrected_find_container
         photon_tracer.follow = corrected_follow
 
         if(enclosingBox):
@@ -2197,10 +2215,10 @@ class testingQT(QWidget):
                 # if(not np.isclose(LSC.location, LSC.geometry.trimesh.centroid).all()):
                 #     LSC.translate(-LSC.geometry.trimesh.centroid)
                 # LSCmeshdims = LSC.geometry.trimesh.extents
-                if(self.rotateY):
-                    LSC.rotate(np.radians(90),(0,1,0))
-                if(self.rotateX):
-                    LSC.rotate(np.radians(90),(1,0,0))
+                # if(self.rotateY):
+                #     LSC.rotate(np.radians(90),(0,1,0))
+                # if(self.rotateX):
+                #     LSC.rotate(np.radians(90),(1,0,0))
                 # if(LSCmeshdims[0] < LSCmeshdims[2]):
                 #     LSC.rotate(np.radians(90),(0,1,0))
                 #     temp = LSCdimZ
@@ -2216,7 +2234,7 @@ class testingQT(QWidget):
                 #     lightDimY = LSCdimY
                 #     maxZ = LSCdimZ
             # ✅ NEW: Position LSC so its bottom is 0.1mm BELOW world center
-            LSC.location = (0, 0, LSCdimZ/2 - 0.1)
+            LSC.location = (0, 0, 0)
         else:
             if(LSCshape == 'Box'):
                 LSC = createBoxLSC(LSCdimX, LSCdimY, thinFilmThick, wavAbs, wavN)
@@ -2235,9 +2253,10 @@ class testingQT(QWidget):
             LSC, x, abs_spec, ems_spec = addLR305(LSC, LumConc, LumPLQY)
             
         
-        LSC = addSolarCells(LSC, solLeft, solRight, solFront, solBack, solAll)
+        # LSC = addSolarCells(LSC, solLeft, solRight, solFront, solBack, solAll)
         
-        LSC = addBottomSurf(LSC, bottomMir, bottomScat)
+        # LSC = addBottomSurf(LSC, bottomMir, bottomScat)
+
 
         # Create second LSC (waveguide) with automatic multi-part splitting
         if enableSecondLSC:
@@ -2338,6 +2357,11 @@ class testingQT(QWidget):
                 # Apply lumophore to all waveguide parts
                 for part in waveguide_parts:
                     part, x2, abs_spec2, ems_spec2 = addLR305(part, LumConc2, LumPLQY2)
+
+            if(LumType2 == 'Import Custom'):
+                # Apply lumophore to all waveguide parts
+                for part in waveguide_parts:
+                    part, x2, abs_spec2, ems_spec2 = addCeYAG(part, LumConc2, LumPLQY2)
             
             # Configure waveguide surfaces for all parts
             for part in waveguide_parts:
@@ -2350,7 +2374,7 @@ class testingQT(QWidget):
             light = addCircMask(light, lightDimX)
         if(lightPattern == 'Point Source'):
             light = addPointSource(light)
-        if(0<lightDiv<=90):
+        if(0<lightDiv<=180):
             light = addLightDiv(light, lightDiv)
         if lightDiv == 0:
             light = addStraightRays(light)  # Straight rays for lightDiv = 0
