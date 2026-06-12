@@ -290,7 +290,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>8.1</string>
+      <string>9</string>
      </property>
      <property name="placeholderText">
       <string>z</string>
@@ -1375,7 +1375,7 @@
       </rect>
      </property>
      <property name="text">
-      <string>2.33</string>
+      <string>0</string>
      </property>
     </widget>
     
