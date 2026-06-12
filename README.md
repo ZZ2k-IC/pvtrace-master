@@ -83,7 +83,7 @@ Key assumptions include:
 - simple batch processing logics for cpu accelerations
 
 ### Analysis Features
-
+- Preserved absolute CAD coordinates for STL files.
 - absorption heatmaps
 - detector-plane support
 - custom LED angular emission distributions
