@@ -615,17 +615,11 @@ class testingQT(QWidget):
                     # Multiple files - create parent + children
                     print(f"  Creating parent container with {len(stl_files)} child nodes")
                     
-                    # Load all meshes first to get their centroids
                     meshes = []
-                    centroids = []
+
                     for stl_file in stl_files:
                         mesh = trimesh.load(stl_file)
                         meshes.append(mesh)
-                        centroids.append(mesh.centroid)
-                    
-                    # Calculate the reference position (centroid of first part)
-                    reference_centroid = np.mean(centroids, axis=0)  # Mean of all parts
-                    print(f"  Reference centroid (Part 0): [{reference_centroid[0]:.3f}, {reference_centroid[1]:.3f}, {reference_centroid[2]:.3f}]")
                     
                     # Create parent container (no geometry, just for organization)
                     parent_container = Node(
@@ -652,22 +646,14 @@ class testingQT(QWidget):
                             parent=parent_container
                         )
                         
-                        # Calculate relative position from reference (first part)
-                        # This preserves the spacing from the STL files
-                        relative_position = [
-                            centroids[i][0] - reference_centroid[0],
-                            centroids[i][1] - reference_centroid[1],
-                            centroids[i][2] - reference_centroid[2]
-                        ]
-                        part_node.location = relative_position
+
+                        part_node.location = [0.0, 0.0, 0.0]
                         
                         part_nodes.append(part_node)
                         
                         bounds = mesh.bounds
                         print(f"    Part {i} ({filename}):")
                         print(f"      Vertices: {len(mesh.vertices)}")
-                        print(f"      Centroid: [{centroids[i][0]:.3f}, {centroids[i][1]:.3f}, {centroids[i][2]:.3f}]")
-                        print(f"      Relative position: [{relative_position[0]:.3f}, {relative_position[1]:.3f}, {relative_position[2]:.3f}]")
                         print(f"      Bounds: min=[{bounds[0][0]:.3f}, {bounds[0][1]:.3f}, {bounds[0][2]:.3f}]")
                         print(f"              max=[{bounds[1][0]:.3f}, {bounds[1][1]:.3f}, {bounds[1][2]:.3f}]")
                     
@@ -759,8 +745,8 @@ class testingQT(QWidget):
         def addLR305(LSC, LumConc, LumPLQY):
             wavelength_range = (wavMin, wavMax)
             x = np.linspace(wavMin, wavMax, 200)  # wavelength, units: nm
-            absorption_spectrum = lumogen_f_red_305.absorption(x)*LumConc  # units: mm-1
-            emission_spectrum = lumogen_f_red_305.emission(x)*LumConc      # units: mm-1
+            absorption_spectrum = lumogen_f_red_305.absorption(x)/10*LumConc  # units: mm-1
+            emission_spectrum = lumogen_f_red_305.emission(x)/10*LumConc      # units: mm-1
             LSC.geometry.material.components.append(
                 Luminophore(
                     coefficient=np.column_stack((x, absorption_spectrum)),
@@ -775,6 +761,26 @@ class testingQT(QWidget):
         def addCeYAG(LSC, LumConc, LumPLQY):
             return None
 
+        def addXYMirror(mirror_z, mirror_x, mirror_y, thickness=1e-3):
+            mirror = Node(
+                name="xyMirror",
+                geometry=Box(
+                    (mirror_x, mirror_y, thickness),
+                    material=Material(refractive_index=1.0)
+                ),
+                parent=world
+            )
+            mirror.location = (0, 0, mirror_z)
+
+            # Remove any absorption/scattering
+            mirror.geometry.material.components = []
+
+            class PerfectMirror(FresnelSurfaceDelegate):
+                def reflectivity(self, surface, ray, geometry, container, adjacent):
+                    return 1.0
+
+            mirror.geometry.material.surface = Surface(delegate=PerfectMirror())
+            return mirror
 
         def addBottomSurf(LSC, bottomMir, bottomScat):
             if(bottomMir or bottomScat):
@@ -917,9 +923,9 @@ class testingQT(QWidget):
                 parent = world
             )
             
-            # Force light source to z=0
+            # Force light source to z=-35
             light.location = (0, 0, 0)
-            print(f"Light positioned at: (0, 0, 0)")
+            print(f"Light positioned at: (0, 0, -35)")
             
             return wavelengths*1e9, intensity5800, light
         
@@ -1035,12 +1041,15 @@ class testingQT(QWidget):
                         world_segment="short",
                         short_length=LSCdimZ * 0.1,
                         bauble_radius=LSCdimX * 0.005,
+                        mark_final_position=True,
+                        final_position_radius=0.03,
                     )
                     
                     if events[-1] == photon_tracer.Event.ABSORB:
                         exit_norms.append(surfnorms[-1])
                         exit_rays.append(path[-1])
                         absorbed_rays.append(path[-1])
+
 
                     elif events[-1] == photon_tracer.Event.KILL:
                         exit_norms.append(surfnorms[-1])
@@ -2077,15 +2086,15 @@ class testingQT(QWidget):
                 # Since waveguides are embedded in LSC and separated from each other,
                 # any waveguide exit should interact with LSC material, not other waveguides
 
-                # corrected_adjacent = adjacent
+                corrected_adjacent = adjacent
                 
-                # if "Waveguide" in container.name and container.name == hit.name:
-                #     # Ray is inside a waveguide hitting its own surface (exiting)
-                #     # Force adjacent to be the LSC absorber (parent)
-                #     for node in scene.root.children:
-                #         if node.name == "LSC":
-                #             corrected_adjacent = node
-                #             break
+                if "Waveguide" in container.name and container.name == hit.name:
+                    # Ray is inside a waveguide hitting its own surface (exiting)
+                    # Force adjacent to be the LSC absorber (parent)
+                    for node in scene.root.children:
+                        if node.name == "LSC":
+                            corrected_adjacent = node
+                            break
                 
                 # # FIX: Correct adjacent detection for waveguide surfaces in the air
                 # if hit.name == "LSC2_Waveguide" and container.name == "LSC2_Waveguide":
@@ -2100,7 +2109,6 @@ class testingQT(QWidget):
 
                 # Pentacene host: absorb only along z
                 if container.name == "LSC":
-
                     z_component_fraction = abs(ray.direction[2])
                     absorption_distance = (
                         full_distance * z_component_fraction
@@ -2157,8 +2165,8 @@ class testingQT(QWidget):
                     ray = ray.representation(scene.root, hit)
                     
                     # Use corrected adjacent for surface interactions
-                    if surface.is_reflected(ray, hit.geometry, container, adjacent): #Not corrected_adjacent!!
-                        ray = surface.reflect(ray, hit.geometry, container, adjacent)
+                    if surface.is_reflected(ray, hit.geometry, container, corrected_adjacent): #Not corrected_adjacent!!
+                        ray = surface.reflect(ray, hit.geometry, container, corrected_adjacent)
                         ray = ray.representation(hit, scene.root)
                         
                         try:
@@ -2170,7 +2178,7 @@ class testingQT(QWidget):
                         history.append((ray, normal, Event.REFLECT))
                         continue
                     else:
-                        ref_ray = surface.transmit(ray, hit.geometry, container, adjacent)
+                        ref_ray = surface.transmit(ray, hit.geometry, container, corrected_adjacent)
                         if ref_ray is None:
                             history.append((ray, (None,None,None), Event.KILL))
                             break
@@ -2253,11 +2261,30 @@ class testingQT(QWidget):
             LSC, x, abs_spec, ems_spec = addLR305(LSC, LumConc, LumPLQY)
             
         
-        # LSC = addSolarCells(LSC, solLeft, solRight, solFront, solBack, solAll)
+        LSC = addSolarCells(LSC, solLeft, solRight, solFront, solBack, solAll)
         
-        # LSC = addBottomSurf(LSC, bottomMir, bottomScat)
+        LSC = addBottomSurf(LSC, bottomMir, bottomScat)
 
+        # # Add 2 air spacers below the LSC to avoid mis interactions.
+        # side_width = (LSCdimY - 0.6)/2
+        # thickness = LSCdimZ/50
+        # bottomSpacer1 = createBoxLSC(LSCdimX, (LSCdimY-0.6)/2, LSCdimZ/50, 0, 1)
+        # bottomSpacer1.name = "bottomSpacer1"
+        # bottomSpacer1.location = [0, 0.31+side_width/2, -thickness/2]
 
+        # bottomSpacer2 = createBoxLSC(LSCdimX, (LSCdimY-0.6)/2, LSCdimZ/50, 0, 1)
+        # bottomSpacer2.name = "bottomSpacer2"
+        # bottomSpacer2.location = [0, -0.31-side_width/2, -thickness/2]
+# # ...existing code...
+
+#         # Add optional XY mirror
+#         xy_mirror = addXYMirror(
+#             mirror_z=-72.0,
+#             mirror_x=LSCdimX * 2,
+#             mirror_y=LSCdimY * 2
+#         )
+#         print(f"XY mirror created at z=-72.0 mm")
+# # ...existing code...
         # Create second LSC (waveguide) with automatic multi-part splitting
         if enableSecondLSC:
             waveguide_parent = None
