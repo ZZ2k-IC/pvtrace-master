@@ -558,7 +558,6 @@ class testingQT(QWidget):
                 ),
                 parent = world
             )
-            
             return LSC
         
 
@@ -582,7 +581,6 @@ class testingQT(QWidget):
                 ),
                 parent = world
             )
-            LSC.location = [0,0,LSCdimZ/2]
             return LSC
         
         def createMultiPartMeshLSC(self, wavAbs, wavN, stl_path, parent_node):
@@ -2216,8 +2214,10 @@ class testingQT(QWidget):
         if not thinFilm:
             if(LSCshape == 'Box'):
                 LSC = createBoxLSC(LSCdimX, LSCdimY, LSCdimZ, wavAbs, wavN)
+                LSC.location = (0, 0, LSCdimZ/2)
             if(LSCshape == 'Cylinder'):
                 LSC = createCylLSC(LSCdimX, LSCdimZ, wavAbs, wavN)
+                LSC.location = (0, 0, LSCdimZ/2)
             if(LSCshape == 'Sphere'):
                 LSC = createSphLSC(LSCdimX, wavAbs, wavN)
             if(LSCshape == 'Import Mesh'):
@@ -2244,7 +2244,6 @@ class testingQT(QWidget):
                 #     lightDimY = LSCdimY
                 #     maxZ = LSCdimZ
             # ✅ NEW: Position LSC so its bottom is 0.1mm BELOW world center
-            LSC.location = (0, 0, 0)
         else:
             if(LSCshape == 'Box'):
                 LSC = createBoxLSC(LSCdimX, LSCdimY, thinFilmThick, wavAbs, wavN)
