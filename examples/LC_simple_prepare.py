@@ -6,13 +6,14 @@ import trimesh
 import matplotlib.pyplot as plt
 
 from pvtrace.light.light import XZ_rectangular_mask
+from pvtrace.light.light import StoredRayLight
 import os
 
 os.makedirs("stored_rays_info", exist_ok=True)
 # unit is cm
 
 # Set up the rays number
-rays_num = 1000
+rays_num = 80000
 
 # Add nodes to the scene graph
 world = Node(
@@ -32,7 +33,7 @@ LC = Node(
     ),
     parent=world
 )
-LC.location = (0, 0, -73/2+0.01)
+LC.location = (0, 0, -73/2+0.03)
 
 def addXYMirror(mirror_z, mirror_x, mirror_y, thickness=1e-3):
     mirror = Node(
@@ -57,17 +58,17 @@ def addXYMirror(mirror_z, mirror_x, mirror_y, thickness=1e-3):
 
 bottom_mirror = addXYMirror(mirror_z=-73-0.01, mirror_x=5, mirror_y=0.6)
 
-# Add source of photons
-light = Node(
-    name="Light (555nm)",
-    parent=world,
-    light=Light(
-        position=functools.partial(XZ_rectangular_mask, 2.46, 20), 
-        direction=functools.partial(isotropic, np.pi)
-    )
-)
+# # Add source of photons
+# light = Node(
+#     name="Light (555nm)",
+#     parent=world,
+#     light=Light(
+#         position=functools.partial(XZ_rectangular_mask, 2.46, 20), 
+#         direction=functools.partial(isotropic, np.pi)
+#     )
+# )
 
-light.location = (0, 0, -73/2)
+
 
 
 # # Add detector at bottom of cylinder (z=0.1) - detects rays coming from above
@@ -90,7 +91,7 @@ top_detector = create_planar_detector_node(
     detection_direction=(0, 0, 1), 
     parent=world
 )
-top_detector.translate((0, 0, 0))  # Position at cylinder top
+top_detector.translate((0, 0, 0.1))  # Position at cylinder top
 
 # Use meshcat to render the scene (optional)
 viewer = MeshcatRenderer(open_browser=True, transparency=False, opacity=0.5, wireframe=True)
@@ -104,13 +105,30 @@ start_t = time.time()  # Start timing here
 # List to store initial ray directions for comparison
 initial_ray_directions = []
 
-for ray in scene.emit(rays_num):  # Note: using 'viewer' not 'scene'
+# light.location = (0, 0, -73/2)
+killed_count = 0
+
+light = Node(
+    name="Stored Light",
+    parent=world,
+    light=StoredRayLight(
+        r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\pvtrace-master\stored_rays_info\LC_simple_inside_detector_80000.npz"
+    )
+)
+
+for ray in scene.emit(10):  # Note: using 'viewer' not 'scene'
     # Store initial ray direction
     initial_ray_directions.append(ray.direction)
 
     steps = photon_tracer.follow(scene, ray)
     path, surface_info, events = zip(*steps)
+    if events[-1].name == "KILL":
+        killed_count += 1
+
     viewer.add_ray_path(path)  # Note: using 'viewer' not 'renderer'
+
+print("Killed rays =", killed_count)
+
 
 # Print timing results
 print(f"Took {time.time() - start_t}s.")
@@ -128,50 +146,50 @@ top_efficiency = top_detector.detector_delegate.detected_count / rays_num * 100
 print(f"Top detection efficiency: {top_efficiency:.1f}%")
 
 
-# After the simulation is complete, extract all detected ray directions
-all_detected_rays = (top_detector.detector_delegate.detected_rays)
-print(all_detected_rays[0].keys())
+# # After the simulation is complete, extract all detected ray directions
+# all_detected_rays = (top_detector.detector_delegate.detected_rays)
+# print(all_detected_rays[0].keys())
 
-# Extract detected ray data
-detected_positions = np.array(
-    [ray['position'] for ray in all_detected_rays]
-)
+# # Extract detected ray data
+# detected_positions = np.array(
+#     [ray['position'] for ray in all_detected_rays]
+# )
 
-detected_directions = np.array(
-    [ray['direction'] for ray in all_detected_rays]
-)
+# detected_directions = np.array(
+#     [ray['direction'] for ray in all_detected_rays]
+# )
 
-detected_wavelengths = np.array(
-    [ray['wavelength'] for ray in all_detected_rays]
-)
+# detected_wavelengths = np.array(
+#     [ray['wavelength'] for ray in all_detected_rays]
+# )
 
-# Save everything in one file
-np.savez(
-    "stored_rays_info/LC_simple_inside_detector.npz",
-    positions=detected_positions,
-    directions=detected_directions,
-    wavelengths=detected_wavelengths
-)
+# # Save everything in one file
+# np.savez(
+#     "stored_rays_info/LC_simple_inside_detector.npz",
+#     positions=detected_positions,
+#     directions=detected_directions,
+#     wavelengths=detected_wavelengths
+# )
 
-print(f"Saved {len(detected_positions)} detected rays")
+# print(f"Saved {len(detected_positions)} detected rays")
 #%%
 import os
 
 print(os.getcwd())
 #%%
-# import numpy as np
-# data = np.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\pvtrace-master\stored_rays_info\LC_simple_inside_detector.npz")
+import numpy as np
+data = np.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\pvtrace-master\stored_rays_info\LC_simple_inside_detector_80000.npz")
 
-# positions = data["positions"]
-# directions = data["directions"]
-# wavelengths = data["wavelengths"]
+positions = data["positions"]
+directions = data["directions"]
+wavelengths = data["wavelengths"]
 
-# for pos, dir, wl in zip(
-#         positions,
-#         directions,
-#         wavelengths):
+for pos, dir, wl in zip(
+        positions,
+        directions,
+        wavelengths):
 
-#     print(pos, dir, wl)
+    print(f"Position: {pos}, Direction: {dir}, Wavelength: {wl}")
 #%%
 
 # # Extract 3D direction vectors

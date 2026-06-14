@@ -1446,6 +1446,11 @@
       <string>Point Source</string>
      </property>
     </item>
+    <item>
+     <property name="text">
+      <string>Stored Rays</string>
+     </property>
+    </item>
    </widget>
    <widget class="QLabel" name="label_8">
     <property name="geometry">

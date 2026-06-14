@@ -39,8 +39,10 @@ def default_direction():
 
 
 def rectangular_mask(X, Y):
-    return (np.random.uniform(-X, X), np.random.uniform(-Y, Y), 0.0)
+    return (np.random.uniform(-X, X), np.random.uniform(-Y, Y), 0.0) 
 
+def XZ_rectangular_mask(X, Z):
+    return (np.random.uniform(-X, X), 0.0, np.random.uniform(-Z, Z)) 
 
 def circular_mask(radius: float) -> Sequence[float]:
     rads = np.random.uniform(0, 2.0 * np.pi)
@@ -159,3 +161,40 @@ class Light(object):
                 source=self.name,
             )
             yield ray
+
+class StoredRayLight(Light):
+
+    def __init__(self, filename, name="Stored Rays"):
+
+        super().__init__(name=name)
+
+        data = np.load(filename)
+
+        self.positions = data["positions"]
+        self.directions = data["directions"]
+        self.wavelengths = data["wavelengths"]
+
+        self.index = 0
+
+    def emit(self, num_rays=None):
+
+        n_total = len(self.positions)
+
+        if num_rays is None:
+            num_rays = 1
+
+        for _ in range(num_rays):
+
+            if self.index >= n_total:
+                return
+
+            i = self.index
+            self.index += 1
+
+            yield Ray(
+                wavelength=float(self.wavelengths[i]),
+                position=tuple(self.positions[i]),
+                direction=tuple(self.directions[i]),
+                is_alive=True,
+                source=self.name,
+            )

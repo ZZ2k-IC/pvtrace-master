@@ -30,6 +30,7 @@ import json
 
 import time
 
+from pvtrace.light.light import StoredRayLight
 
 
 class testingQT(QWidget):
@@ -45,6 +46,7 @@ class testingQT(QWidget):
         
         self.inputShape = self.findChild(QtWidgets.QComboBox,'comboBox')
         self.STLfile = ''
+        self.rayFile = ''
         self.lumophore = self.findChild(QtWidgets.QComboBox,'comboBox_2')
         self.lumophoreConc = self.findChild(QtWidgets.QLineEdit,'lineEdit_20')
         self.waveguideAbs = self.findChild(QtWidgets.QLineEdit,'lineEdit_23')
@@ -104,6 +106,8 @@ class testingQT(QWidget):
         # add surface scattering to waveguide
         # add additional layered geometries
         
+        self.lightPattern.currentTextChanged.connect(self.onLightPatternChanged)
+
         self.inputShape.currentTextChanged.connect(self.onShapeChanged)
         self.rotateX = False
         self.rotateY = False
@@ -161,6 +165,22 @@ class testingQT(QWidget):
         self.enableSecondLSC.stateChanged.connect(self.onEnableSecondLSC)
         self.inputShape2.currentTextChanged.connect(self.onShape2Changed)
 
+    def onSelectRayFile(self):
+
+        fileName = QtWidgets.QFileDialog.getOpenFileName(
+            self,
+            'Open Stored Rays',
+            '',
+            'NumPy Files (*.npz)'
+        )
+
+        self.rayFile = fileName[0]
+
+
+    def onLightPatternChanged(self):
+
+        if self.lightPattern.currentText() == "Stored Rays":
+            self.onSelectRayFile()        
 
     def onEnableDetector(self):
         """Handle detector enable/disable"""
@@ -309,6 +329,7 @@ class testingQT(QWidget):
         data= {}
         data['LSC'] = []
         data['LSC'].append({
+            'rayFile': self.rayFile,
             'shape': self.inputShape.currentText(),
             'STLfile': self.STLfile,
             'dimX': (self.dimx.text()),
@@ -363,6 +384,8 @@ class testingQT(QWidget):
         with open(fileName) as json_file:
             data = json.load(json_file)
             for p in data['LSC']:
+                self.rayFile = p.get('rayFile', '')
+                self.rayFileShow.setPlainText(self.rayFile)
                 self.inputShape.setCurrentText(p['shape'])
                 self.STLfile = p['STLfile']
                 self.STLfileShow.setPlainText(self.STLfile)
@@ -559,7 +582,7 @@ class testingQT(QWidget):
                 ),
                 parent = world
             )
-            LSC.location = [0,0,0]
+            LSC.location = [0,0,LSCdimZ/2]
             return LSC
         
         def createMultiPartMeshLSC(self, wavAbs, wavN, stl_path, parent_node):
@@ -925,7 +948,6 @@ class testingQT(QWidget):
             
             # Force light source to z=-35
             light.location = (0, 0, 0)
-            print(f"Light positioned at: (0, 0, -35)")
             
             return wavelengths*1e9, intensity5800, light
         
@@ -957,28 +979,6 @@ class testingQT(QWidget):
             light.light.direction = lambda: lambertian_with_fresnel(n1=1.6, n2=1.8)
             return light
         
-        # # Add this after loading your direction data (around line 758)
-        # direction_data_list = np.load(r"C:\Users\Zedd\OneDrive - Imperial College London\UROP\pvtrace-master\detected_ray_directions_LiNbO3_trapezium.npy")
-
-        # def custom_direction_sampler():
-        #     """Sample a random direction from the loaded data"""
-        #     if len(direction_data_list) == 0:
-        #         # Fallback to default lambertian if no data
-        #         return lambertian(np.radians(lightDiv))
-            
-        #     # Randomly select one direction from the loaded data
-        #     random_index = np.random.randint(0, len(direction_data_list))
-        #     direction = direction_data_list[random_index]
-            
-        #     # Normalize the direction vector (ensure it's unit length)
-        #     direction = direction / np.linalg.norm(direction)
-            
-        #     return tuple(direction)
-        
-        # def addCustomDirection(light):
-        #     """Use custom direction sampler for the light source"""
-        #     light.light.direction = custom_direction_sampler
-        #     return light
 
         def doRayTracing(numRays, convThres, showSim, use_parallel=True):
             """Modified to support both parallel and sequential processing"""
@@ -1212,6 +1212,8 @@ class testingQT(QWidget):
                         world_segment="short",
                         short_length=LSCdimZ * 0.1,
                         bauble_radius=LSCdimX * 0.005,
+                        mark_final_position=True,
+                        final_position_radius=0.03
                     )
                     
 # ...existing code...
@@ -2393,20 +2395,40 @@ class testingQT(QWidget):
             # Configure waveguide surfaces for all parts
             for part in waveguide_parts:
                 part = addWaveguideSurfaces(part)
-        
-        wavelengths, intensity, light = initLight(lightWavMin, lightWavMax)
-        if(lightPattern == 'Rectangle Mask'):
-            light = addRectMask(light, lightDimX, lightDimY)
-        if(lightPattern == 'Circle Mask'):
-            light = addCircMask(light, lightDimX)
-        if(lightPattern == 'Point Source'):
-            light = addPointSource(light)
-        if(0<lightDiv<=180):
-            light = addLightDiv(light, lightDiv)
-        if lightDiv == 0:
-            light = addStraightRays(light)  # Straight rays for lightDiv = 0
-        if lightDiv == 1234567:
-            light = addRealLambertian(light) # Lambertian with Fresnel for special case
+
+        # Use stored rays if a ray file has been selected
+        if (lightPattern == "Stored Rays" and self.rayFile != ''):
+
+            wavelengths = None
+            intensity = None
+
+            stored_light = StoredRayLight(self.rayFile)
+
+            light = Node(
+                name="Stored Light",
+                light=stored_light,
+                parent=world
+            )
+
+            stored_ray_count = len(stored_light.positions)
+            numRays = min(numRays, stored_ray_count)  # Limit to the number of stored rays available
+
+            print(f"Loaded {numRays} stored rays")
+
+        else:
+            wavelengths, intensity, light = initLight(lightWavMin, lightWavMax)
+            if(lightPattern == 'Rectangle Mask'):
+                light = addRectMask(light, lightDimX, lightDimY)
+            if(lightPattern == 'Circle Mask'):
+                light = addCircMask(light, lightDimX)
+            if(lightPattern == 'Point Source'):
+                light = addPointSource(light)
+            if(0<lightDiv<=180):
+                light = addLightDiv(light, lightDiv)
+            if lightDiv == 0:
+                light = addStraightRays(light)  # Straight rays for lightDiv = 0
+            if lightDiv == 1234567:
+                light = addRealLambertian(light) # Lambertian with Fresnel for special case
             
         start_t = time.time()
 
