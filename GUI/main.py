@@ -2214,10 +2214,10 @@ class testingQT(QWidget):
         if not thinFilm:
             if(LSCshape == 'Box'):
                 LSC = createBoxLSC(LSCdimX, LSCdimY, LSCdimZ, wavAbs, wavN)
-                LSC.location = (0, 0, LSCdimZ/2)
+                LSC.location = (0, 0, LSCdimZ/2-0.01)
             if(LSCshape == 'Cylinder'):
                 LSC = createCylLSC(LSCdimX, LSCdimZ, wavAbs, wavN)
-                LSC.location = (0, 0, LSCdimZ/2)
+                LSC.location = (0, 0, LSCdimZ/2-0.01)
             if(LSCshape == 'Sphere'):
                 LSC = createSphLSC(LSCdimX, wavAbs, wavN)
             if(LSCshape == 'Import Mesh'):
@@ -2255,7 +2255,7 @@ class testingQT(QWidget):
                 LSC = createMeshLSC(self, wavAbs, wavN)
                 LSC.geometry.trimesh.apply_scale(1,1,thinFilmThick/LSCdimZ)
                 bulk_undoped = createMeshLSC(self, wavAbs, wavN)
-            LSC.location = (0,0,LSCdimZ/2)
+            LSC.location = (0,0,LSCdimZ/2-0.01)
             bulk_undoped.name = "bulk"
             
         if(LumType == 'Lumogen Red'):

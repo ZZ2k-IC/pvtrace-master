@@ -19,37 +19,53 @@ logger = logging.getLogger(__name__)
 
 
 def find_container(intersections):
-    """ Returns the container node.
-    
-        Parameters
-        ----------
-        intersections: List[Intersection]
-            Full list of intersections of ray with a scene.
-    
-        Returns
-        -------
-        Node
-            The container node
-
-        Example
-        -------
-        >>> intersections = scene.intersections(ray.position, ray.directions)
-        >>> container = find_container(intersections)
     """
+    Container determined using parity rule.
+
+    Odd number of future intersections
+        => currently inside that object
+
+    Even number of future intersections
+        => currently outside that object
+
+    Container is chosen as the nearest odd-parity object.
+    """
+
+    if len(intersections) == 0:
+        return None
+
     if len(intersections) == 1:
         return intersections[0].hit
-    count = collections.Counter([x.hit for x in intersections]).most_common()
-    candidates = [x[0] for x in count if x[1] == 1]
+
+    counts = collections.Counter(
+        x.hit for x in intersections
+    )
+
+    odd_nodes = {
+        node
+        for node, count in counts.items()
+        if count % 2 == 1
+    }
+
     pairs = []
+
     for intersection in intersections:
-        node = intersection.hit
-        if node in candidates:
-            pairs.append((node, intersection.distance))
-    # [(node, dist), (node, dist)... ]
-    pairs = sorted(pairs, key=lambda tup: tup[1])
-    containers, _ = zip(*pairs)
-    container = containers[0]
-    return container
+
+        if intersection.hit in odd_nodes:
+
+            pairs.append(
+                (intersection.hit,
+                 intersection.distance)
+            )
+
+    if len(pairs) == 0:
+        return None
+
+    pairs.sort(
+        key=lambda x: x[1]
+    )
+
+    return pairs[0][0]
 
 
 def next_hit(scene, ray):
